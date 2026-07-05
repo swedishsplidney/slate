@@ -8,29 +8,31 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # find dependencies
 find_package(Vulkan REQUIRED)
-find_package(glfw3 3.3 REQUIRED)
-
-# collect source files (recursively)
-file(GLOB_RECURSE ENGINE_SOURCES
-    "src/*.cpp"
-    "src/*.hpp"
-)
+find_package(SDL3 REQUIRED)
 
 # define the executable
-add_executable(slate ${ENGINE_SOURCES}
+add_executable(slate
+        src/main.cpp
+        src/core/engine.cpp
+        src/core/engine.hpp
+        src/renderer/renderer.hpp
+        src/renderer/vulkan/vulkan_renderer.cpp
         src/renderer/vulkan/vulkan_renderer.hpp
-        src/renderer/vulkan/vulkan_renderer.cpp)
+        src/renderer/vertex.hpp
+        src/renderer/mesh.hpp
+        src/renderer/mesh.cpp
+)
 
 # include dirs
 target_include_directories(slate PRIVATE
-    src
-    ${Vulkan_INCLUDE_DIRS}
+        src
+        ${Vulkan_INCLUDE_DIRS}
 )
 
 # link libraries
 target_link_libraries(slate PRIVATE
-    Vulkan::Vulkan
-    glfw
+        Vulkan::Vulkan
+        SDL3::SDL3
 )
 
-message(STATUS "slate engine configured successfully!")
+message(STATUS "slate engine configured successfully with SDL3!")

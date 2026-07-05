@@ -1,10 +1,15 @@
 #include "engine.hpp"
+#include "renderer/vulkan/vulkan_renderer.hpp"
 #include <stdexcept>
+#include <SDL3/SDL_vulkan.h>
 
 namespace slate {
 
     Engine::Engine() {
         initWindow();
+
+        m_renderer = std::make_unique<VulkanRenderer>(m_window);
+        m_renderer->init();
     }
 
     Engine::~Engine() {
@@ -12,23 +17,16 @@ namespace slate {
     }
 
     void Engine::initWindow() {
-        // glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-
-        // initialize glfw
-        if (!glfwInit()) {
-            throw std::runtime_error("failed to initialize glfw");
+        // init video subsystem
+        if (!SDL_Init(SDL_INIT_VIDEO)) {
+            throw std::runtime_error("failed to initialize SDL3: " + std::string(SDL_GetError()));
         }
 
-        // tell glfw to not make an opengl context
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        SDL_WindowFlags flags = SDL_WINDOW_VULKAN;
 
-        // window resizing
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-        // create the window
-        m_window = glfwCreateWindow(m_width, m_height, "slate engine", nullptr, nullptr);
+        m_window = SDL_CreateWindow("Slate Engine", m_width, m_height, flags);
         if (!m_window) {
-            throw std::runtime_error("failed to create glfw window");
+            throw std::runtime_error("failed to create SDL3 window: " + std::string(SDL_GetError()));
         }
     }
 
@@ -37,15 +35,27 @@ namespace slate {
     }
 
     void Engine::mainLoop() {
-        // keep running until the window is closed
-        while (!glfwWindowShouldClose(m_window)) {
-            glfwPollEvents();
+        bool shouldClose = false;
+        SDL_Event event;
+
+        while (!shouldClose) {
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_EVENT_QUIT) {
+                    shouldClose = true;
+                }
+            }
+
+            m_renderer->drawFrame();
         }
+
+        vkDeviceWaitIdle(static_cast<VulkanRenderer*>(m_renderer.get())->getDevice());
     }
 
     void Engine::cleanup() {
-        glfwDestroyWindow(m_window);
-        glfwTerminate();
+        if (m_window) {
+            SDL_DestroyWindow(m_window);
+        }
+        SDL_Quit();
     }
 
 }

@@ -1,7 +1,8 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <memory>
+#include <SDL3/SDL.h>
+#include "renderer/renderer.hpp"
 
 namespace slate {
 
@@ -10,7 +11,6 @@ namespace slate {
         Engine();
         ~Engine();
 
-        // prevent copying the engine
         Engine(const Engine&) = delete;
         Engine& operator=(const Engine&) = delete;
 
@@ -21,9 +21,11 @@ namespace slate {
         void mainLoop();
         void cleanup();
 
-        GLFWwindow* m_window{nullptr};
+        SDL_Window* m_window{nullptr};
         const int m_width{800};
         const int m_height{600};
+
+        std::unique_ptr<Renderer> m_renderer{nullptr};
     };
 
 }
