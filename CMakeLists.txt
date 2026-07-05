@@ -10,6 +10,31 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Vulkan REQUIRED)
 find_package(SDL3 REQUIRED)
 
+# auto shader compilation stuff
+find_program(GLSLC_EXECUTABLE glslc REQUIRED)
+
+file(GLOB_RECURSE SHADER_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert"
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag"
+)
+
+set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders/compiled")
+file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
+
+set(COMPILED_SHADERS "")
+foreach(SHADER_FILE ${SHADER_SOURCES})
+    get_filename_component(SHADER_NAME ${SHADER_FILE} NAME)
+    set(OUTPUT_SPV "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv")
+
+    add_custom_command(
+            OUTPUT ${OUTPUT_SPV}
+            COMMAND ${GLSLC_EXECUTABLE} ${SHADER_FILE} -o ${OUTPUT_SPV}
+            DEPENDS ${SHADER_FILE}
+            COMMENT "Compiling shader: ${SHADER_NAME} -> ${SHADER_NAME}.spv"
+    )
+    list(APPEND COMPILED_SHADERS ${OUTPUT_SPV})
+endforeach()
+
 # define the executable
 add_executable(slate
         src/main.cpp
@@ -21,6 +46,7 @@ add_executable(slate
         src/renderer/vertex.hpp
         src/renderer/mesh.hpp
         src/renderer/mesh.cpp
+        ${COMPILED_SHADERS}
 )
 
 # include dirs

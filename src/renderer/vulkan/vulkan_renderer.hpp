@@ -1,6 +1,9 @@
 #pragma once
 
+#include <memory>
+
 #include "renderer/renderer.hpp"
+#include "renderer/mesh.hpp"
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <SDL3/SDL.h>
@@ -49,6 +52,7 @@ namespace slate {
         void createCommandPool();
         void createCommandBuffer();
         void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+        void createGraphicsPipeline();
 
         SDL_Window* m_window{nullptr};
         VkInstance m_instance{VK_NULL_HANDLE};
@@ -69,8 +73,12 @@ namespace slate {
         VkFence m_inFlightFence{VK_NULL_HANDLE};
         VkCommandPool m_commandPool{VK_NULL_HANDLE};
         VkCommandBuffer m_commandBuffer{VK_NULL_HANDLE};
+        VkPipelineLayout m_pipelineLayout{VK_NULL_HANDLE};
+        VkPipeline m_graphicsPipeline{VK_NULL_HANDLE};
 
         std::vector<char> readFile(const std::string& filename);
         VkShaderModule createShaderModule(const std::vector<char>& code);
+
+        std::unique_ptr<Mesh> m_triangleMesh{nullptr};
     };
 }
