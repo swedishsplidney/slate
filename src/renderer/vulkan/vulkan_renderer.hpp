@@ -36,6 +36,8 @@ namespace slate {
 
         VkDevice getDevice() const { return m_device; }
 
+        void framebufferResized() { m_framebufferResized = true; }
+
     private:
         void createInstance();
         void createSurface();
@@ -80,5 +82,11 @@ namespace slate {
         VkShaderModule createShaderModule(const std::vector<char>& code);
 
         std::unique_ptr<Mesh> m_triangleMesh{nullptr};
+
+        bool m_framebufferResized = false;
+        void recreateSwapchain();
+        void cleanupSwapchain();
+
+        void onWindowResize(int width, int height) override { m_framebufferResized = true; }
     };
 }

@@ -22,7 +22,7 @@ namespace slate {
             throw std::runtime_error("failed to initialize SDL3: " + std::string(SDL_GetError()));
         }
 
-        SDL_WindowFlags flags = SDL_WINDOW_VULKAN;
+        SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
 
         m_window = SDL_CreateWindow("Slate Engine", m_width, m_height, flags);
         if (!m_window) {
@@ -42,6 +42,10 @@ namespace slate {
             while (SDL_PollEvent(&event)) {
                 if (event.type == SDL_EVENT_QUIT) {
                     shouldClose = true;
+                }
+
+                if (event.type == SDL_EVENT_WINDOW_RESIZED) {
+                    m_renderer->onWindowResize(event.window.data1, event.window.data2);
                 }
             }
 

@@ -6,6 +6,8 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "renderer/vertex.hpp"
 
@@ -32,12 +34,36 @@ namespace slate {
         createGraphicsPipeline();
 
         std::vector<Vertex> vertices = {
-            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-            {{-0.5f, 0.5}, {0.0f, 0.0f, 1.0f}}
+            // front face
+            {{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}},
+            {{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
+            {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
+            {{-0.5f,  0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},
+
+            // back face
+            {{-0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
+            {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 1.0f}},
+            {{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}},
+            {{-0.5f,  0.5f, -0.5f}, {0.1f, 0.1f, 0.1f}}
         };
 
-        m_triangleMesh = std::make_unique<Mesh>(m_device, m_physicalDevice, vertices);
+        // connectivity rules
+        std::vector<uint16_t> indices = {
+            // front
+            0, 2, 1,  0, 3, 2,
+            // right
+            1, 6, 5,  1, 2, 6,
+            // back
+            4, 5, 6,  4, 6, 7,
+            // left
+            4, 3, 0,  4, 7, 3,
+            // top
+            4, 1, 5,  4, 0, 1,
+            // bottom
+            3, 6, 2,  3, 7, 6
+        };
+
+        m_triangleMesh = std::make_unique<Mesh>(m_device, m_physicalDevice, vertices, indices);
     }
 
     void VulkanRenderer::pickPhysicalDevice() {
@@ -171,7 +197,10 @@ namespace slate {
         // hardcode standard settings for now
         VkSurfaceFormatKHR surfaceFormat{VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
         VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR; //vsync
-        VkExtent2D extent{800, 600};
+
+        int width = 0, height = 0;
+        SDL_GetWindowSize(m_window, &width, &height);
+        VkExtent2D extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
 
         m_swapchainImageFormat = surfaceFormat.format;
         m_swapchainExtent = extent;
@@ -215,6 +244,41 @@ namespace slate {
         vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount, m_swapchainImages.data());
 
         std::cout << "vulkan swapchain successfully created with " << imageCount << " images!" << std::endl;
+    }
+
+    void VulkanRenderer::cleanupSwapchain() {
+        for (auto framebuffer : m_swapchainFramebuffers) {
+            vkDestroyFramebuffer(m_device, framebuffer, nullptr);
+        }
+        m_swapchainFramebuffers.clear();
+
+        for (auto imageView : m_swapchainImageViews) {
+            vkDestroyImageView(m_device, imageView, nullptr);
+        }
+        m_swapchainImageViews.clear();
+
+        if (m_swapchain != VK_NULL_HANDLE) {
+            vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
+            m_swapchain = VK_NULL_HANDLE;
+        }
+    }
+
+    void VulkanRenderer::recreateSwapchain() {
+        // minimization/width and height are 0
+        int width = 0, height = 0;
+        SDL_GetWindowSize(m_window, &width, &height);
+        while (width == 0 || height == 0) {
+            SDL_GetWindowSize(m_window, &width, &height);
+            SDL_Delay(1);
+        }
+
+        vkDeviceWaitIdle(m_device);
+
+        cleanupSwapchain();
+
+        createSwapchain();
+        createImageViews();
+        createFramebuffers();
     }
 
     void VulkanRenderer::createImageViews() {
@@ -385,8 +449,42 @@ namespace slate {
         // draw calls
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
 
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(m_swapchainExtent.width);
+        viewport.height = static_cast<float>(m_swapchainExtent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = m_swapchainExtent;
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
         if (m_triangleMesh) {
             m_triangleMesh->bind(commandBuffer);
+
+            float time = SDL_GetTicks() / 1000.0f;
+
+            // model matrix
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::rotate(model, time * glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+            model = glm::rotate(model, time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+            // view matrix
+            glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2.0f));
+
+            // projection matrix
+            float aspect = static_cast<float>(m_swapchainExtent.width) / static_cast<float>(m_swapchainExtent.height);
+            glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
+            proj[1][1] *= -1.0f;
+
+            glm::mat4 transform = proj * view * model;
+
+            vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+
             m_triangleMesh->draw(commandBuffer);
         }
 
@@ -446,19 +544,28 @@ namespace slate {
     }
 
     void VulkanRenderer::drawFrame() {
-        // wait for gpu to finish the prev. frame tracking
+        // wait for gpu
         vkWaitForFences(m_device, 1, &m_inFlightFence, VK_TRUE, UINT64_MAX);
+
+        // get img from swapchain
+        uint32_t imageIndex;
+        VkResult result = vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+        // recreate the swapchain if it's out of date
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreateSwapchain();
+            return;
+        } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+            throw std::runtime_error("failed to acquire swapchain image!");
+        }
+
         vkResetFences(m_device, 1, &m_inFlightFence);
 
-        // get image from swapchain
-        uint32_t imageIndex;
-        vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
-
-        // reset and record the command buffer
+        // reset and record
         vkResetCommandBuffer(m_commandBuffer, 0);
         recordCommandBuffer(m_commandBuffer, imageIndex);
 
-        // send the command buffer to the gpu
+        // send to gpu
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -479,7 +586,7 @@ namespace slate {
             throw std::runtime_error("failed to submit draw command buffer!");
         }
 
-        // present the rendered image back to the window surface
+        // present to surface
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         presentInfo.waitSemaphoreCount = 1;
@@ -490,7 +597,15 @@ namespace slate {
         presentInfo.pSwapchains = swapchains;
         presentInfo.pImageIndices = &imageIndex;
 
-        vkQueuePresentKHR(m_presentQueue, &presentInfo);
+        result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
+
+        // check if flagged
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_framebufferResized) {
+            m_framebufferResized = false;
+            recreateSwapchain();
+        } else if (result != VK_SUCCESS) {
+            throw std::runtime_error("failed to present swapchain image!");
+        }
     }
 
     std::vector<char> VulkanRenderer::readFile(const std::string& filename) {
@@ -564,25 +679,13 @@ namespace slate {
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-        // viewport and scissor rectangles
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = (float) m_swapchainExtent.width;
-        viewport.height = (float) m_swapchainExtent.height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = m_swapchainExtent;
-
+        // viewport state
         VkPipelineViewportStateCreateInfo viewportState{};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
+        viewportState.pViewports = nullptr;
         viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
+        viewportState.pScissors = nullptr;
 
         // rasterizer
         VkPipelineRasterizationStateCreateInfo rasterizer{};
@@ -613,14 +716,36 @@ namespace slate {
         colorBlending.pAttachments = &colorBlendAttachment;
 
         // pipeline layout
+        VkPushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(glm::mat4);
+
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 0;
-        pipelineLayoutInfo.pushConstantRangeCount = 0;
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
         if (vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create pipeline layout!");
         }
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+        dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicStateInfo.pDynamicStates = dynamicStates.data();
 
         // put it all together
         VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -632,7 +757,7 @@ namespace slate {
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = nullptr;
+        pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = nullptr;
         pipelineInfo.layout = m_pipelineLayout;

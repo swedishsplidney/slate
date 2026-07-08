@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # find dependencies
 find_package(Vulkan REQUIRED)
 find_package(SDL3 REQUIRED)
+find_package(glm REQUIRED)
 
 # auto shader compilation stuff
 find_program(GLSLC_EXECUTABLE glslc REQUIRED)
@@ -59,6 +60,7 @@ target_include_directories(slate PRIVATE
 target_link_libraries(slate PRIVATE
         Vulkan::Vulkan
         SDL3::SDL3
+        glm::glm
 )
 
 message(STATUS "slate engine configured successfully with SDL3!")

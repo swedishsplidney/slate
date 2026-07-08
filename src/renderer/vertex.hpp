@@ -1,34 +1,35 @@
 #pragma once
 
+#include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 #include <array>
 
 namespace slate {
 
     struct Vertex {
-        float position[2];
-        float color[3];
+        glm::vec3 pos;
+        glm::vec3 color;
 
-        // tell vulkan how much memory a vertex needs
+        Vertex(glm::vec3 p, glm::vec3 c) : pos(p), color(c) {}
+
         static VkVertexInputBindingDescription getBindingDescription() {
-            VkVertexInputBindingDescription bindingDescription = {};
+            VkVertexInputBindingDescription bindingDescription{};
             bindingDescription.binding = 0;
             bindingDescription.stride = sizeof(Vertex);
             bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
             return bindingDescription;
         }
 
-        // tell vulkan how to use the position
         static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-            std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions = {};
+            std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
 
-            // position attribute
+            // position
             attributeDescriptions[0].binding = 0;
             attributeDescriptions[0].location = 0;
-            attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-            attributeDescriptions[0].offset = offsetof(Vertex, position);
+            attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+            attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
-            // color attribute
+            // color
             attributeDescriptions[1].binding = 0;
             attributeDescriptions[1].location = 1;
             attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
