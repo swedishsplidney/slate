@@ -9,7 +9,7 @@ as of right now, slate engine is purely vulkan based, however, directx and metal
 # technical info:
 
 * **indexed rendering:** for good memory efficiency while mapping triangles
-* **backface culling:** because why would you render more than you need to**
+* **backface culling:** because why would you render more than you need to
 * **double-buffering:** basically just vsync, protects from screen tears
 
 ---
