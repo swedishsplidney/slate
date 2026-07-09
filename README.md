@@ -8,3 +8,26 @@ as of right now, slate engine is purely vulkan based, however, directx and metal
 
 # technical info:
 
+* **indexed rendering:** for good memory efficiency while mapping triangles
+* **backface culling:** because why would you render more than you need to**
+* **double-buffering:** basically just vsync, protects from screen tears
+
+---
+
+# the stack:
+
+* JetBrains CLion
+* c++
+* CMake
+* vulkan
+* sdl3
+
+---
+
+# ai disclosure:
+
+no generative ai or LLMs were used to write or debug any of this code
+
+---
+
+created by **swedishsplidney** for hack club stardance 2026
