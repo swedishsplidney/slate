@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <SDL3/SDL.h>
+
+#include "camera.hpp"
 #include "renderer/renderer.hpp"
 
 namespace slate {
@@ -26,6 +28,10 @@ namespace slate {
         const int m_height{600};
 
         std::unique_ptr<Renderer> m_renderer{nullptr};
+
+        Camera m_camera{glm::vec3(0.0f, 0.0f, 4.0f)};
+        uint64_t m_lastTime{0};
+        bool m_cursorLocked{true};
     };
 
 }

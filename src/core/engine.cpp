@@ -38,26 +38,57 @@ namespace slate {
         bool shouldClose = false;
         SDL_Event event;
 
+        m_lastTime = SDL_GetTicks();
+
+        SDL_SetWindowRelativeMouseMode(m_window, true);
+
         while (!shouldClose) {
+
+            // calculate delta time each frame
+            uint64_t currentTime = SDL_GetTicks();
+            float deltaTime = (currentTime - m_lastTime) / 1000.0f;
+            m_lastTime = currentTime;
+
             while (SDL_PollEvent(&event)) {
                 if (event.type == SDL_EVENT_QUIT) {
                     shouldClose = true;
                 }
 
+                if (event.type == SDL_EVENT_KEY_DOWN) {
+                    if (event.key.scancode == SDL_SCANCODE_ESCAPE) {
+                        m_cursorLocked = !m_cursorLocked;
+                        SDL_SetWindowRelativeMouseMode(m_window, m_cursorLocked);
+                    }
+                }
+
                 if (event.type == SDL_EVENT_WINDOW_RESIZED) {
                     m_renderer->onWindowResize(event.window.data1, event.window.data2);
                 }
+
+                if (m_cursorLocked && event.type == SDL_EVENT_MOUSE_MOTION) {
+                    m_camera.processMouseMovement(event.motion.xrel, -event.motion.yrel);
+                }
             }
 
-            m_renderer->drawFrame();
+            if (m_cursorLocked) {
+                const bool* keyboardState = SDL_GetKeyboardState(nullptr);
+                m_camera.processKeyboard(keyboardState, deltaTime);
+            }
+
+            m_renderer->drawFrame(m_camera.getViewMatrix());
         }
 
         vkDeviceWaitIdle(static_cast<VulkanRenderer*>(m_renderer.get())->getDevice());
     }
 
     void Engine::cleanup() {
+        if (m_renderer) {
+            m_renderer.reset();
+        }
+
         if (m_window) {
             SDL_DestroyWindow(m_window);
+            m_window = nullptr;
         }
         SDL_Quit();
     }

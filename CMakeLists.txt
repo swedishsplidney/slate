@@ -22,7 +22,9 @@ file(GLOB_RECURSE SHADER_SOURCES
 set(SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders/compiled")
 file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
 
-set(COMPILED_SHADERS "")
+set(COMPILED_SHADERS ""
+        src/core/camera.cpp
+        src/core/camera.hpp)
 foreach(SHADER_FILE ${SHADER_SOURCES})
     get_filename_component(SHADER_NAME ${SHADER_FILE} NAME)
     set(OUTPUT_SPV "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv")

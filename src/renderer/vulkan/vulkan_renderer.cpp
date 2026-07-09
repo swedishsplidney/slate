@@ -424,7 +424,7 @@ namespace slate {
         }
     }
 
-    void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const glm::mat4& viewMatrix) {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -473,15 +473,13 @@ namespace slate {
             model = glm::rotate(model, time * glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
             model = glm::rotate(model, time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-            // view matrix
-            glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2.0f));
-
             // projection matrix
             float aspect = static_cast<float>(m_swapchainExtent.width) / static_cast<float>(m_swapchainExtent.height);
-            glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
+            glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
             proj[1][1] *= -1.0f;
 
-            glm::mat4 transform = proj * view * model;
+            // transform matrix
+            glm::mat4 transform = proj * viewMatrix * model;
 
             vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
 
@@ -543,7 +541,7 @@ namespace slate {
         }
     }
 
-    void VulkanRenderer::drawFrame() {
+    void VulkanRenderer::drawFrame(const glm::mat4& viewMatrix) {
         // wait for gpu
         vkWaitForFences(m_device, 1, &m_inFlightFence, VK_TRUE, UINT64_MAX);
 
@@ -563,7 +561,7 @@ namespace slate {
 
         // reset and record
         vkResetCommandBuffer(m_commandBuffer, 0);
-        recordCommandBuffer(m_commandBuffer, imageIndex);
+        recordCommandBuffer(m_commandBuffer, imageIndex, viewMatrix);
 
         // send to gpu
         VkSubmitInfo submitInfo{};
