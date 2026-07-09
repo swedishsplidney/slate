@@ -14,6 +14,14 @@ as of right now, slate engine is purely vulkan based, however, directx and metal
 
 ---
 
+# future features:
+
+* obj (and maybe gltf, stl, fbx, etc) importing via `tinyobjloader`
+* custom persistent ui system
+* generic game engine stuff
+
+---
+
 # the stack:
 
 * JetBrains CLion
