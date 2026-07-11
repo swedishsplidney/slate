@@ -63,7 +63,7 @@ namespace slate {
             3, 6, 2,  3, 7, 6
         };
 
-        m_triangleMesh = std::make_unique<Mesh>(m_device, m_physicalDevice, vertices, indices);
+        m_sceneMeshes.push_back(std::make_unique<Mesh>(m_device, m_physicalDevice, vertices, indices));
     }
 
     void VulkanRenderer::pickPhysicalDevice() {
@@ -463,27 +463,24 @@ namespace slate {
         scissor.extent = m_swapchainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        if (m_triangleMesh) {
-            m_triangleMesh->bind(commandBuffer);
+        for (const auto& mesh : m_sceneMeshes) {
+            if (mesh) {
+                mesh->bind(commandBuffer);
 
-            float time = SDL_GetTicks() / 1000.0f;
+                float time = SDL_GetTicks() / 1000.0f;
+                glm::mat4 model = glm::mat4(1.0f);
+                model = glm::rotate(model, time * glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+                model = glm::rotate(model, time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-            // model matrix
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::rotate(model, time * glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-            model = glm::rotate(model, time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+                float aspect = static_cast<float>(m_swapchainExtent.width) / static_cast<float>(m_swapchainExtent.height);
+                glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
+                proj[1][1] *= -1.0f;
 
-            // projection matrix
-            float aspect = static_cast<float>(m_swapchainExtent.width) / static_cast<float>(m_swapchainExtent.height);
-            glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
-            proj[1][1] *= -1.0f;
+                glm::mat4 transform = proj * viewMatrix * model;
+                vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
 
-            // transform matrix
-            glm::mat4 transform = proj * viewMatrix * model;
-
-            vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
-
-            m_triangleMesh->draw(commandBuffer);
+                mesh->draw(commandBuffer);
+            }
         }
 
         vkCmdEndRenderPass(commandBuffer);
@@ -775,7 +772,7 @@ namespace slate {
     }
 
     void VulkanRenderer::cleanup() {
-        m_triangleMesh.reset();
+        m_sceneMeshes.clear();
 
         if (m_graphicsPipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(m_device, m_graphicsPipeline, nullptr);

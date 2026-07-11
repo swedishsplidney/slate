@@ -35,8 +35,11 @@ namespace slate {
         void cleanup() override;
 
         VkDevice getDevice() const { return m_device; }
+        VkPhysicalDevice getPhysicalDevice() const { return m_physicalDevice; }
 
         void framebufferResized() { m_framebufferResized = true; }
+
+        void addMeshToScene(std::unique_ptr<Mesh> mesh) { m_sceneMeshes.push_back(std::move(mesh)); }
 
     private:
         void createInstance();
@@ -81,7 +84,7 @@ namespace slate {
         std::vector<char> readFile(const std::string& filename);
         VkShaderModule createShaderModule(const std::vector<char>& code);
 
-        std::unique_ptr<Mesh> m_triangleMesh{nullptr};
+        std::vector<std::unique_ptr<Mesh>> m_sceneMeshes;
 
         bool m_framebufferResized = false;
         void recreateSwapchain();

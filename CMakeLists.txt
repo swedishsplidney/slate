@@ -24,7 +24,14 @@ file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
 
 set(COMPILED_SHADERS ""
         src/core/camera.cpp
-        src/core/camera.hpp)
+        src/core/camera.hpp
+        src/resources/mesh_loader.cpp
+        src/resources/mesh_loader.hpp
+        src/ui/ui_element.cpp
+        src/ui/ui_element.hpp
+        src/ui/ui_manager.hpp
+        src/ui/ui_button.hpp
+)
 foreach(SHADER_FILE ${SHADER_SOURCES})
     get_filename_component(SHADER_NAME ${SHADER_FILE} NAME)
     set(OUTPUT_SPV "${SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv")
@@ -56,6 +63,7 @@ add_executable(slate
 target_include_directories(slate PRIVATE
         src
         ${Vulkan_INCLUDE_DIRS}
+        external/tinyobjloader
 )
 
 # link libraries
