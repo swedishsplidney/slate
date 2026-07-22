@@ -6,10 +6,13 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <functional>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "renderer/vertex.hpp"
+#include "ui/ui_vertex.hpp"
+#include "ui/ui_element.hpp"
 
 namespace slate {
 
@@ -26,44 +29,14 @@ namespace slate {
         createLogicalDevice();
         createSwapchain();
         createImageViews();
+        createDepthResources();
         createRenderPass();
         createFramebuffers();
         createSyncObjects();
         createCommandPool();
         createCommandBuffer();
         createGraphicsPipeline();
-
-        std::vector<Vertex> vertices = {
-            // front face
-            {{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}},
-            {{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
-            {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
-            {{-0.5f,  0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},
-
-            // back face
-            {{-0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
-            {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 1.0f}},
-            {{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}},
-            {{-0.5f,  0.5f, -0.5f}, {0.1f, 0.1f, 0.1f}}
-        };
-
-        // connectivity rules
-        std::vector<uint16_t> indices = {
-            // front
-            0, 2, 1,  0, 3, 2,
-            // right
-            1, 6, 5,  1, 2, 6,
-            // back
-            4, 5, 6,  4, 6, 7,
-            // left
-            4, 3, 0,  4, 7, 3,
-            // top
-            4, 1, 5,  4, 0, 1,
-            // bottom
-            3, 6, 2,  3, 7, 6
-        };
-
-        m_sceneMeshes.push_back(std::make_unique<Mesh>(m_device, m_physicalDevice, vertices, indices));
+        createUIGraphicsPipeline();
     }
 
     void VulkanRenderer::pickPhysicalDevice() {
@@ -312,6 +285,216 @@ namespace slate {
         std::cout << "vulkan image views successfully created for each swapchain buffer!" << std::endl;
     }
 
+    void VulkanRenderer::updateUIGeometry(const std::shared_ptr<UIElement> &rootElement) {
+        if (!rootElement) return;
+        if (!m_uiDirty) return;
+
+        m_uiVerticesMemory.clear();
+        m_uiIndicesMemory.clear();
+
+        std::function<void(const std::shared_ptr<UIElement>&)> buildBatch = [&](const std::shared_ptr<UIElement>& element) {
+            if (!element) return;
+
+            // name check
+            if (element-> getName() == "RootCanvas") {
+                for (const auto& child : element->getChildren()) {
+                    buildBatch(child);
+                }
+                return;
+            }
+
+            glm::vec2 pos = element->getAbsolutePosition();
+            glm::vec2 size = element->getSize();
+
+            glm::vec4 color = glm::vec4(0.12f, 0.14f, 0.18f, 0.95f);
+            if (element->getName() == "importMeshBtn") {
+                color = glm::vec4(0.25f, 0.45f, 0.85f, 1.0f);
+            }
+
+            uint16_t baseIndex = static_cast<uint16_t>(m_uiVerticesMemory.size());
+
+            m_uiVerticesMemory.push_back(UIVertex{ {pos.x, pos.y}, color });
+            m_uiVerticesMemory.push_back(UIVertex{ {pos.x + size.x, pos.y}, color });
+            m_uiVerticesMemory.push_back(UIVertex{ {pos.x + size.x, pos.y + size.y}, color });
+            m_uiVerticesMemory.push_back(UIVertex{ {pos.x, pos.y + size.y}, color });
+
+            m_uiIndicesMemory.push_back(baseIndex + 0);
+            m_uiIndicesMemory.push_back(baseIndex + 1);
+            m_uiIndicesMemory.push_back(baseIndex + 2);
+
+            m_uiIndicesMemory.push_back(baseIndex + 2);
+            m_uiIndicesMemory.push_back(baseIndex + 3);
+            m_uiIndicesMemory.push_back(baseIndex + 0);
+
+            for (const auto& child : element->getChildren()) {
+                buildBatch(child);
+            }
+        };
+
+        buildBatch(rootElement);
+
+        if (m_uiVerticesMemory.empty() || m_uiIndicesMemory.empty()) {
+            m_uiDirty = false;
+            return;
+        }
+
+        if (m_uiVertexBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(m_device, m_uiVertexBuffer, nullptr);
+            vkFreeMemory(m_device, m_uiVertexBufferMemory, nullptr);
+        }
+        if (m_uiIndexBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(m_device, m_uiIndexBuffer, nullptr);
+            vkFreeMemory(m_device, m_uiIndexBufferMemory, nullptr);
+        }
+
+        VkDeviceSize vertexBufferSize = sizeof(UIVertex) * m_uiVerticesMemory.size();
+        VkDeviceSize indexBufferSize = sizeof(uint16_t) * m_uiIndicesMemory.size();
+
+        auto createLocalBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer, VkDeviceMemory& memory) {
+            VkBufferCreateInfo bufferInfo{};
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.size = size;
+            bufferInfo.usage = usage;
+            bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+            if (vkCreateBuffer(m_device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create UI buffer!");
+            }
+
+            VkMemoryRequirements memRequirements;
+            vkGetBufferMemoryRequirements(m_device, buffer, &memRequirements);
+
+            VkPhysicalDeviceMemoryProperties memProperties;
+            vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memProperties);
+
+            uint32_t memoryTypeIndex = 0;
+            VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+                if ((memRequirements.memoryTypeBits & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+                    memoryTypeIndex = i;
+                    break;
+                }
+            }
+
+            VkMemoryAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            allocInfo.allocationSize = memRequirements.size;
+            allocInfo.memoryTypeIndex = memoryTypeIndex;
+
+            if (vkAllocateMemory(m_device, &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+                throw std::runtime_error("failed to allocate UI buffer memory!");
+            }
+
+            vkBindBufferMemory(m_device, buffer, memory, 0);
+        };
+
+        createLocalBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, m_uiVertexBuffer, m_uiVertexBufferMemory);
+        createLocalBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, m_uiIndexBuffer, m_uiIndexBufferMemory);
+
+        void* data;
+        vkMapMemory(m_device, m_uiVertexBufferMemory, 0, vertexBufferSize, 0, &data);
+        memcpy(data, m_uiVerticesMemory.data(), (size_t)vertexBufferSize);
+        vkUnmapMemory(m_device, m_uiVertexBufferMemory);
+
+        vkMapMemory(m_device, m_uiIndexBufferMemory, 0, indexBufferSize, 0, &data);
+        memcpy(data, m_uiIndicesMemory.data(), (size_t)indexBufferSize);
+        vkUnmapMemory(m_device, m_uiIndexBufferMemory);
+
+        // reset flag
+        m_uiDirty = false;
+    }
+
+    uint32_t VulkanRenderer::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+        VkPhysicalDeviceMemoryProperties memProperties;
+        vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memProperties);
+
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+            if ((typeFilter & (1 << i)) &&
+                (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+                return i;
+            }
+        }
+
+        throw std::runtime_error("failed to find suitable memory type!");
+    }
+
+    void VulkanRenderer::createImage(
+        uint32_t width, uint32_t height, VkFormat format,
+        VkImageTiling tiling, VkImageUsageFlags usage,
+        VkMemoryPropertyFlags properties, VkImage& image,
+        VkDeviceMemory& imageMemory
+    ) {
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = width;
+        imageInfo.extent.height = height;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = format;
+        imageInfo.tiling = tiling;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = usage;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        if (vkCreateImage(m_device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create image!");
+        }
+
+        VkMemoryRequirements memRequirements;
+        vkGetImageMemoryRequirements(m_device, image, &memRequirements);
+
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+        if (vkAllocateMemory(m_device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate image memory!");
+        }
+
+        vkBindImageMemory(m_device, image, imageMemory, 0);
+    }
+
+    VkImageView VulkanRenderer::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = image;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = format;
+        viewInfo.subresourceRange.aspectMask = aspectFlags;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+
+        VkImageView imageView;
+        if (vkCreateImageView(m_device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create image view!");
+        }
+
+        return imageView;
+    }
+
+    void VulkanRenderer::createDepthResources() {
+        VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
+
+        createImage(
+            m_swapchainExtent.width,
+            m_swapchainExtent.height,
+            depthFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            m_depthImage,
+            m_depthImageMemory
+        );
+
+        m_depthImageView = createImageView(m_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+    }
+
     void VulkanRenderer::createRenderPass() {
         VkAttachmentDescription colorAttachment{};
         colorAttachment.format = m_swapchainImageFormat;
@@ -327,25 +510,40 @@ namespace slate {
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        // subpasses
+        VkAttachmentDescription depthAttachment{};
+        depthAttachment.format = VK_FORMAT_D32_SFLOAT;
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentRef;
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
-        // subpass dependency for synchro
         VkSubpassDependency dependency{};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.srcAccessMask = 0;
-        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
 
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
         renderPassInfo.dependencyCount = 1;
@@ -362,15 +560,16 @@ namespace slate {
         m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
 
         for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
-            VkImageView attachments[] = {
+            std::array<VkImageView, 2> attachments = {
                 m_swapchainImageViews[i],
+                m_depthImageView
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             framebufferInfo.renderPass = m_renderPass;
-            framebufferInfo.attachmentCount = 1;
-            framebufferInfo.pAttachments = attachments;
+            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            framebufferInfo.pAttachments = attachments.data();
             framebufferInfo.width = m_swapchainExtent.width;
             framebufferInfo.height = m_swapchainExtent.height;
             framebufferInfo.layers = 1;
@@ -379,7 +578,6 @@ namespace slate {
                 throw std::runtime_error("failed to create framebuffer!");
             }
         }
-        std::cout << "vulkan framebuffers successfully created for all views!" << std::endl;
     }
 
     void VulkanRenderer::createSyncObjects() {
@@ -439,16 +637,16 @@ namespace slate {
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = m_swapchainExtent;
 
-        // bg color
-        VkClearValue clearColor = {{{0.018f, 0.021f, 0.027f, 1.0f}}};
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = {{0.018f, 0.021f, 0.027f, 1.0f}};
+        clearValues[1].depthStencil = {1.0f, 0};
+
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
 
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         // draw calls
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
-
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -463,14 +661,17 @@ namespace slate {
         scissor.extent = m_swapchainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+        // mesh drawing
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+
         for (const auto& mesh : m_sceneMeshes) {
             if (mesh) {
                 mesh->bind(commandBuffer);
 
                 float time = SDL_GetTicks() / 1000.0f;
                 glm::mat4 model = glm::mat4(1.0f);
-                model = glm::rotate(model, time * glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-                model = glm::rotate(model, time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+                // model = glm::rotate(model, time * glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+                // model = glm::rotate(model, time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
                 float aspect = static_cast<float>(m_swapchainExtent.width) / static_cast<float>(m_swapchainExtent.height);
                 glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
@@ -481,6 +682,31 @@ namespace slate {
 
                 mesh->draw(commandBuffer);
             }
+        }
+
+        // ui rendering
+        if (m_uiVertexBuffer != VK_NULL_HANDLE && !m_uiIndicesMemory.empty()) {
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiGraphicsPipeline);
+
+            float width = static_cast<float>(m_swapchainExtent.width);
+            float height = static_cast<float>(m_swapchainExtent.height);
+            glm::mat4 orthoProj = glm::ortho(0.0f, width, height, 0.0f, -1.0f, 1.0f);
+
+            vkCmdPushConstants(
+                commandBuffer,
+                m_uiPipelineLayout,
+                VK_SHADER_STAGE_VERTEX_BIT,
+                0,
+                sizeof(glm::mat4),
+                &orthoProj
+            );
+
+            VkBuffer vertexBuffers[] = { m_uiVertexBuffer };
+            VkDeviceSize offsets[] = { 0 };
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+            vkCmdBindIndexBuffer(commandBuffer, m_uiIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_uiIndicesMemory.size()), 1, 0, 0, 0);
         }
 
         vkCmdEndRenderPass(commandBuffer);
@@ -607,7 +833,9 @@ namespace slate {
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
         if (!file.is_open()) {
-            throw std::runtime_error("failed to open file!: " + filename);
+            std::cerr << "error: failed to open shader file at path: " << filename << std::endl;
+            std::cerr << "check the current working directory!" << std::endl;
+            throw std::runtime_error("failed to open file: " + filename);
         }
 
         size_t fileSize = (size_t)file.tellg();
@@ -690,7 +918,7 @@ namespace slate {
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
         // multisampling
@@ -754,7 +982,7 @@ namespace slate {
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = nullptr;
+        pipelineInfo.pDynamicState = &dynamicStateInfo;
         pipelineInfo.layout = m_pipelineLayout;
         pipelineInfo.renderPass = m_renderPass;
         pipelineInfo.subpass = 0;
@@ -769,6 +997,142 @@ namespace slate {
         vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
 
         std::cout << "vulkan graphics pipeline successfully compiled!" << std::endl;
+    }
+
+    void VulkanRenderer::createUIGraphicsPipeline() {
+        auto vertShaderCode = readFile("shaders/compiled/ui.vert.spv");
+        auto fragShaderCode = readFile("shaders/compiled/ui.frag.spv");
+
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+        VkPipelineShaderStageCreateInfo shaderStages[2]{};
+        shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        shaderStages[0].module = vertShaderModule;
+        shaderStages[0].pName = "main";
+
+        shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        shaderStages[1].module = fragShaderModule;
+        shaderStages[1].pName = "main";
+
+        // 2. Define layout attributes for UIVertex structure
+        VkVertexInputBindingDescription bindingDescription{};
+        bindingDescription.binding = 0;
+        bindingDescription.stride = sizeof(UIVertex);
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        VkVertexInputAttributeDescription attributeDescriptions[2]{};
+        // Position Attribute (vec2)
+        attributeDescriptions[0].binding = 0;
+        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].offset = offsetof(UIVertex, pos);
+        // Color Attribute (vec4)
+        attributeDescriptions[1].binding = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(UIVertex, color);
+
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = 2;
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        // alpha blending
+        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_TRUE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
+        std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        VkPushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(glm::mat4);
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+        if (vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &m_uiPipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create UI pipeline layout!");
+        }
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = m_uiPipelineLayout;
+        pipelineInfo.renderPass = m_renderPass;
+        pipelineInfo.subpass = 0;
+
+        if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_uiGraphicsPipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create UI graphics pipeline!");
+        }
+
+        vkDestroyShaderModule(m_device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
+        std::cout << "vulkan UI graphics pipeline successfully compiled!" << std::endl;
     }
 
     void VulkanRenderer::cleanup() {

@@ -12,6 +12,10 @@ namespace slate {
 
         Vertex(glm::vec3 p, glm::vec3 c) : pos(p), color(c) {}
 
+        bool operator==(const Vertex& other) const {
+            return pos == other.pos && color == other.color;
+        }
+
         static VkVertexInputBindingDescription getBindingDescription() {
             VkVertexInputBindingDescription bindingDescription{};
             bindingDescription.binding = 0;

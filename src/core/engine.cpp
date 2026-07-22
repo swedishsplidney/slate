@@ -14,6 +14,18 @@ namespace slate {
         m_renderer = std::make_unique<VulkanRenderer>(m_window);
         m_renderer->init();
 
+        std::vector<Vertex> loadedVertices;
+        std::vector<uint16_t> loadedIndices;
+        if (MeshLoader::loadOBJ("models/test_obj.obj", loadedVertices, loadedIndices)) {
+            auto newMesh = std::make_unique<Mesh>(
+                static_cast<VulkanRenderer*>(m_renderer.get())->getDevice(),
+                static_cast<VulkanRenderer*>(m_renderer.get())->getPhysicalDevice(),
+                loadedVertices,
+                loadedIndices
+            );
+            static_cast<VulkanRenderer*>(m_renderer.get())->addMeshToScene(std::move(newMesh));
+        }
+
         //  init ui container
         m_uiRoot = std::make_shared<UIElement>("RootCanvas", glm::vec2(0.0f), glm::vec2(m_width, m_height));
 
@@ -22,7 +34,7 @@ namespace slate {
             glm::vec2(20.0f, 20.0f),
             glm::vec2(160.0f, 50.0f),
             [this]() {
-                std::cout << "[UI Notification] Clicked! Importing target mesh..." << std::endl;
+                std::cout << "[ui] clicked! Importing target mesh..." << std::endl;
 
                 std::vector<Vertex> loadedVertices;
                 std::vector<uint16_t> loadedIndices;
@@ -120,6 +132,10 @@ namespace slate {
             if (m_cursorLocked) {
                 const bool* keyboardState = SDL_GetKeyboardState(nullptr);
                 m_camera.processKeyboard(keyboardState, deltaTime);
+            }
+
+            if (m_uiRoot) {
+                static_cast<VulkanRenderer*>(m_renderer.get())->updateUIGeometry(m_uiRoot);
             }
 
             m_renderer->drawFrame(m_camera.getViewMatrix());

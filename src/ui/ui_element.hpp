@@ -24,6 +24,9 @@ namespace slate {
         // getters
         const std::string& getName() const { return m_name; }
         glm::vec2 getAbsolutePosition() const;
+        glm::vec2 getSize() const { return m_size; }
+
+        const std::vector<std::shared_ptr<UIElement>>& getChildren() const { return m_children; }
 
     protected:
         std::string m_name;

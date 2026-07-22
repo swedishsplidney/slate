@@ -4,6 +4,9 @@
 
 #include "renderer/renderer.hpp"
 #include "renderer/mesh.hpp"
+#include "ui/ui_vertex.hpp"
+#include "ui/ui_element.hpp"
+
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <SDL3/SDL.h>
@@ -40,6 +43,8 @@ namespace slate {
         void framebufferResized() { m_framebufferResized = true; }
 
         void addMeshToScene(std::unique_ptr<Mesh> mesh) { m_sceneMeshes.push_back(std::move(mesh)); }
+
+        void updateUIGeometry(const std::shared_ptr<UIElement>& rootElement);
 
     private:
         void createInstance();
@@ -86,10 +91,39 @@ namespace slate {
 
         std::vector<std::unique_ptr<Mesh>> m_sceneMeshes;
 
+        VkPipelineLayout m_uiPipelineLayout{VK_NULL_HANDLE};
+        VkPipeline m_uiGraphicsPipeline{VK_NULL_HANDLE};
+
+
+        VkBuffer m_uiVertexBuffer{VK_NULL_HANDLE};
+        VkDeviceMemory m_uiVertexBufferMemory{VK_NULL_HANDLE};
+
+        VkBuffer m_uiIndexBuffer{VK_NULL_HANDLE};
+        VkDeviceMemory m_uiIndexBufferMemory{VK_NULL_HANDLE};
+
+        std::vector<UIVertex> m_uiVerticesMemory;
+        std::vector<uint16_t> m_uiIndicesMemory;
+
+        VkImage m_depthImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_depthImageMemory = VK_NULL_HANDLE;
+        VkImageView m_depthImageView = VK_NULL_HANDLE;
+        
+        void createDepthResources();
+        void createImage(uint32_t width, uint32_t height, VkFormat format,
+                         VkImageTiling tiling, VkImageUsageFlags usage,
+                         VkMemoryPropertyFlags properties, VkImage& image,
+                         VkDeviceMemory& imageMemory);
+        VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+        uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
+        bool m_uiDirty{true};
+
         bool m_framebufferResized = false;
         void recreateSwapchain();
         void cleanupSwapchain();
 
         void onWindowResize(int width, int height) override { m_framebufferResized = true; }
+
+        void createUIGraphicsPipeline();
     };
 }

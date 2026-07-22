@@ -39,3 +39,12 @@ no generative ai or LLMs were used to write or debug any of this code
 ---
 
 created by **swedishsplidney** for hack club stardance 2026
+
+
+---
+
+
+# custom obj file loading :obj:
+
+---
+
