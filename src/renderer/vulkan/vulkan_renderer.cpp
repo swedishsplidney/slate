@@ -220,16 +220,35 @@ namespace slate {
     }
 
     void VulkanRenderer::cleanupSwapchain() {
+        // depth resources
+        if (m_depthImageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(m_device, m_depthImageView, nullptr);
+            m_depthImageView = VK_NULL_HANDLE;
+        }
+
+        if (m_depthImage != VK_NULL_HANDLE) {
+            vkDestroyImage(m_device, m_depthImage, nullptr);
+            m_depthImage = VK_NULL_HANDLE;
+        }
+
+        if (m_depthImageMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(m_device, m_depthImageMemory, nullptr);
+            m_depthImageMemory = VK_NULL_HANDLE;
+        }
+
+        // framebuffers
         for (auto framebuffer : m_swapchainFramebuffers) {
             vkDestroyFramebuffer(m_device, framebuffer, nullptr);
         }
         m_swapchainFramebuffers.clear();
 
+        // image views
         for (auto imageView : m_swapchainImageViews) {
             vkDestroyImageView(m_device, imageView, nullptr);
         }
         m_swapchainImageViews.clear();
 
+        // swapchain
         if (m_swapchain != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
             m_swapchain = VK_NULL_HANDLE;
@@ -251,6 +270,7 @@ namespace slate {
 
         createSwapchain();
         createImageViews();
+        createDepthResources();
         createFramebuffers();
     }
 

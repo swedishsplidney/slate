@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 #include <cmath>
+#include <filesystem>
 #include <earcut.hpp>
 
 namespace std {
@@ -13,7 +14,9 @@ namespace std {
         size_t operator()(slate::Vertex const& vertex) const {
             size_t h1 = hash<float>()(vertex.pos.x) ^ (hash<float>()(vertex.pos.y) << 1) ^ (hash<float>()(vertex.pos.z) << 2);
             size_t h2 = hash<float>()(vertex.color.x) ^ (hash<float>()(vertex.color.y) << 1) ^ (hash<float>()(vertex.color.z) << 2);
-            return h1 ^ (h2 << 1);
+            size_t h3 = hash<float>()(vertex.normal.x) ^ (hash<float>()(vertex.normal.y) << 1) ^ (hash<float>()(vertex.normal.z) << 2);
+            size_t h4 = hash<float>()(vertex.texCoord.x) ^ (hash<float>()(vertex.texCoord.y) << 1);
+            return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3);
         }
     };
 }
@@ -25,12 +28,70 @@ namespace slate {
         std::vector<Vertex>& outVertices,
         std::vector<uint16_t>& outIndices
     ) {
+        namespace fs = std::filesystem;
+        fs::path objPath(filePath);
+
+        if (!fs::exists(objPath)) {
+            std::cerr << "mesh_loader error: file does not exist: " << filePath << std::endl;
+            return false;
+        }
+
+        fs::path expectedMtlPath = objPath;
+        expectedMtlPath.replace_extension(".mtl");
+
+        std::string mtlBaseDir = objPath.parent_path().string();
+        if (!mtlBaseDir.empty() && mtlBaseDir.back() != '/' && mtlBaseDir.back() != '\\') {
+            mtlBaseDir += "/";
+        }
+
+        std::ifstream file(filePath);
+        if (!file.is_open()) {
+            std::cerr << "mesh_loader error: failed to open file: " << filePath << std::endl;
+            return false;
+        }
+
+        std::stringstream buffer;
+        std::string line;
+        bool foundMtllib = false;
+        bool mtlNeedsCorrection = false;
+
+        while (std::getline(file, line)) {
+            if (line.rfind("mtllib", 0) == 0) {
+                foundMtllib = true;
+                std::string currentMtlName = line.substr(7);
+                fs::path currentMtlPath = fs::path(mtlBaseDir) / currentMtlName;
+
+                // auto correct the mtl
+                if (!fs::exists(currentMtlPath) && fs::exists(expectedMtlPath)) {
+                    line = "mtllib " + expectedMtlPath.filename().string();
+                    mtlNeedsCorrection = true;
+                }
+            }
+            buffer << line << "\n";
+        }
+        file.close();
+
+        std::string objData = buffer.str();
+        if (!foundMtllib && fs::exists(expectedMtlPath)) {
+            std::string header = "mtllib " + expectedMtlPath.filename().string() + "\n";
+            objData = header + objData;
+            mtlNeedsCorrection = true;
+        }
+
+        if (mtlNeedsCorrection) {
+            std::cout << "[mesh_loader] auto-recovered missing/broken mtllib reference -> "
+                      << expectedMtlPath.filename().string() << std::endl;
+        }
+
+        std::istringstream objStream(objData);
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
         std::vector<tinyobj::material_t> materials;
         std::string err;
 
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, filePath.c_str(), nullptr, false)) {
+        tinyobj::MaterialFileReader matFileReader(mtlBaseDir);
+
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, &objStream, &matFileReader, false)) {
             std::cerr << "tinyobjloader error: " << err << std::endl;
             return false;
         }
@@ -43,15 +104,24 @@ namespace slate {
             for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
                 size_t fv = shape.mesh.num_face_vertices[f];
 
+                glm::vec3 faceColor(0.8f, 0.8f, 0.8f);
+                int materialId = shape.mesh.material_ids[f];
+
+                if (materialId >= 0 && materialId < static_cast<int>(materials.size())) {
+                    const auto& mat = materials[materialId];
+                    faceColor = glm::vec3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]);
+                }
+
                 auto getVertex = [&](size_t v_idx) -> Vertex {
                     tinyobj::index_t idx = shape.mesh.indices[index_offset + v_idx];
+
                     glm::vec3 pos = {
                         attrib.vertices[3 * idx.vertex_index + 0],
                         attrib.vertices[3 * idx.vertex_index + 1],
                         attrib.vertices[3 * idx.vertex_index + 2]
                     };
-                    glm::vec3 col = { pos.x + 0.5f, pos.y + 0.5f, pos.z + 0.5f };
-                    return Vertex(pos, col);
+
+                    return Vertex(pos, faceColor);
                 };
 
                 auto addVertex = [&](const Vertex& v) -> uint16_t {
@@ -136,7 +206,8 @@ namespace slate {
 
         std::cout << "successfully loaded & triangulated obj: " << filePath
                   << " (" << outVertices.size() << " unique vertices, "
-                  << outIndices.size() << " indices)" << std::endl;
+                  << outIndices.size() << " indices, "
+                  << materials.size() << " materials)" << std::endl;
 
         return true;
     }

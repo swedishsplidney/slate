@@ -9,11 +9,14 @@ namespace slate {
     struct Vertex {
         glm::vec3 pos;
         glm::vec3 color;
+        glm::vec3 normal;
+        glm::vec2 texCoord;
 
-        Vertex(glm::vec3 p, glm::vec3 c) : pos(p), color(c) {}
+        Vertex(glm::vec3 p, glm::vec3 c, glm::vec3 n = glm::vec3(0.0f, 1.0f, 0.0f), glm::vec2 uv = glm::vec2(0.0f))
+            : pos(p), color(c), normal(n), texCoord(uv) {}
 
         bool operator==(const Vertex& other) const {
-            return pos == other.pos && color == other.color;
+            return pos == other.pos && color == other.color && normal == other.normal && texCoord == other.texCoord;
         }
 
         static VkVertexInputBindingDescription getBindingDescription() {
@@ -24,8 +27,8 @@ namespace slate {
             return bindingDescription;
         }
 
-        static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-            std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+        static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
+            std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
 
             // position
             attributeDescriptions[0].binding = 0;
@@ -38,6 +41,18 @@ namespace slate {
             attributeDescriptions[1].location = 1;
             attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
             attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+            // normal
+            attributeDescriptions[2].binding = 0;
+            attributeDescriptions[2].location = 2;
+            attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+            attributeDescriptions[2].offset = offsetof(Vertex, normal);
+
+            // tex coord
+            attributeDescriptions[3].binding = 0;
+            attributeDescriptions[3].location = 3;
+            attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;
+            attributeDescriptions[3].offset = offsetof(Vertex, texCoord);
 
             return attributeDescriptions;
         }
