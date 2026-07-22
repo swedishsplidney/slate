@@ -16,7 +16,6 @@ as of right now, slate engine is purely vulkan based, however, directx and metal
 
 # future features:
 
-* obj (and maybe gltf, stl, fbx, etc) importing via `tinyobjloader`
 * custom persistent ui system
 * generic game engine stuff
 
@@ -39,12 +38,3 @@ no generative ai or LLMs were used to write or debug any of this code
 ---
 
 created by **swedishsplidney** for hack club stardance 2026
-
-
----
-
-
-# custom obj file loading :obj:
-
----
-
