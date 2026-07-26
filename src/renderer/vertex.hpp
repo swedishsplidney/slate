@@ -12,11 +12,9 @@ namespace slate {
         glm::vec3 normal;
         glm::vec2 texCoord;
 
-        Vertex(glm::vec3 p, glm::vec3 c, glm::vec3 n = glm::vec3(0.0f, 1.0f, 0.0f), glm::vec2 uv = glm::vec2(0.0f))
-            : pos(p), color(c), normal(n), texCoord(uv) {}
-
         bool operator==(const Vertex& other) const {
-            return pos == other.pos && color == other.color && normal == other.normal && texCoord == other.texCoord;
+            return pos == other.pos && color == other.color &&
+                   normal == other.normal && texCoord == other.texCoord;
         }
 
         static VkVertexInputBindingDescription getBindingDescription() {
@@ -48,7 +46,7 @@ namespace slate {
             attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
             attributeDescriptions[2].offset = offsetof(Vertex, normal);
 
-            // tex coord
+            // uv
             attributeDescriptions[3].binding = 0;
             attributeDescriptions[3].location = 3;
             attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;

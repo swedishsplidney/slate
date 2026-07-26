@@ -6,6 +6,7 @@
 #include "renderer/mesh.hpp"
 #include "ui/ui_vertex.hpp"
 #include "ui/ui_element.hpp"
+#include "resources/mesh_loader.hpp"
 
 #include <vulkan/vulkan.h>
 #include <vector>
@@ -22,6 +23,20 @@ namespace slate {
             return graphicsFamily >= 0 && presentFamily >= 0;
         }
     };
+
+    struct GlobalUBO {
+        alignas(16) glm::vec3 cameraPos;
+        alignas(16) glm::vec3 lightDirection{0.5f, 1.0f, 0.5f};
+        alignas(16) glm::vec3 lightColor{1.0f, 0.98f, 0.95f};
+        alignas(4)  float lightIntensity = 2.5f;
+    };
+
+    struct UniformBufferObject {
+        alignas(16) glm::mat4 view;
+        alignas(16) glm::mat4 proj;
+    };
+
+    constexpr uint32_t MAX_MATERIALS = 1000;
 
     class VulkanRenderer : public Renderer {
         const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -46,6 +61,8 @@ namespace slate {
 
         void updateUIGeometry(const std::shared_ptr<UIElement>& rootElement);
 
+        void updateMaterials(const std::vector<Material>& materials);
+
     private:
         void createInstance();
         void createSurface();
@@ -62,6 +79,7 @@ namespace slate {
         void createCommandPool();
         void createCommandBuffer();
         void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const glm::mat4& viewMatrix);
+        void createDescriptorSetLayout();
         void createGraphicsPipeline();
 
         SDL_Window* m_window{nullptr};
@@ -83,7 +101,8 @@ namespace slate {
         VkFence m_inFlightFence{VK_NULL_HANDLE};
         VkCommandPool m_commandPool{VK_NULL_HANDLE};
         VkCommandBuffer m_commandBuffer{VK_NULL_HANDLE};
-        VkPipelineLayout m_pipelineLayout{VK_NULL_HANDLE};
+        VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
+        VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
         VkPipeline m_graphicsPipeline{VK_NULL_HANDLE};
 
         std::vector<char> readFile(const std::string& filename);
@@ -125,5 +144,40 @@ namespace slate {
         void onWindowResize(int width, int height) override { m_framebufferResized = true; }
 
         void createUIGraphicsPipeline();
+
+        void createUniformBuffers();
+        void createDescriptorPoolAndSets();
+        void updateUniformBuffer(uint32_t currentImage, const glm::vec3& cameraPos);
+
+        std::vector<VkBuffer> m_uniformBuffers;
+        std::vector<VkDeviceMemory> m_uniformBuffersMemory;
+        std::vector<void*> m_uniformBuffersMapped;
+
+        std::vector<VkBuffer> m_materialBuffers;
+        std::vector<VkDeviceMemory> m_materialBuffersMemory;
+        std::vector<void*> m_materialBuffersMapped;
+
+        std::vector<VkDescriptorSet> m_descriptorSets;
+
+        void createBuffer(
+            VkDeviceSize size,
+            VkBufferUsageFlags usage,
+            VkMemoryPropertyFlags properties,
+            VkBuffer& buffer,
+            VkDeviceMemory& bufferMemory
+        );
+
+        VkDescriptorSetLayout m_globalDescriptorSetLayout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_materialDescriptorSetLayout = VK_NULL_HANDLE;
+
+        VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
+
+        std::vector<VkDescriptorSet> m_globalDescriptorSets;
+        std::vector<VkDescriptorSet> m_materialDescriptorSets;
+
+        void createMaterialBuffers();
+
+        uint32_t m_currentFrame = 0;
     };
+
 }

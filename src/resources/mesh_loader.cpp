@@ -26,7 +26,8 @@ namespace slate {
     bool MeshLoader::loadOBJ(
         const std::string& filePath,
         std::vector<Vertex>& outVertices,
-        std::vector<uint16_t>& outIndices
+        std::vector<uint16_t>& outIndices,
+        std::vector<Material>& outMaterials
     ) {
         namespace fs = std::filesystem;
         fs::path objPath(filePath);
@@ -61,7 +62,6 @@ namespace slate {
                 std::string currentMtlName = line.substr(7);
                 fs::path currentMtlPath = fs::path(mtlBaseDir) / currentMtlName;
 
-                // auto correct the mtl
                 if (!fs::exists(currentMtlPath) && fs::exists(expectedMtlPath)) {
                     line = "mtllib " + expectedMtlPath.filename().string();
                     mtlNeedsCorrection = true;
@@ -96,6 +96,42 @@ namespace slate {
             return false;
         }
 
+        outMaterials.clear();
+        if (materials.empty()) {
+            // fallback if no mtl
+            Material defaultMat{};
+            defaultMat.name = "DefaultMaterial";
+            defaultMat.materialId = 0;
+            outMaterials.push_back(defaultMat);
+        } else {
+            for (size_t i = 0; i < materials.size(); ++i) {
+                const auto& mat = materials[i];
+                Material slateMat{};
+                slateMat.name = mat.name;
+                slateMat.materialId = static_cast<uint32_t>(i);
+                slateMat.gpuData.albedoFactor = glm::vec4(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2], 1.0f);
+
+                if (mat.roughness > 0.0f) {
+                    slateMat.gpuData.roughnessFactor = mat.roughness;
+                } else if (mat.shininess > 0.0f) {
+                    float rawRoughness = std::sqrt(2.0f / (mat.shininess + 2.0f));
+                    slateMat.gpuData.roughnessFactor = glm::clamp(rawRoughness * 2.0f, 0.15f, 0.85f);
+                } else {
+                    slateMat.gpuData.roughnessFactor = 0.5f;
+                }
+
+                if (mat.metallic > 0.0f) {
+                    slateMat.gpuData.metallicFactor = mat.metallic;
+                } else {
+                    float avgDiffuse = (mat.diffuse[0] + mat.diffuse[1] + mat.diffuse[2]) / 3.0f;
+                    float avgSpecular = (mat.specular[0] + mat.specular[1] + mat.specular[2]) / 3.0f;
+                    slateMat.gpuData.metallicFactor = (avgSpecular > 0.4f && avgDiffuse < 0.2f) ? 0.8f : 0.0f;
+                }
+
+                outMaterials.push_back(slateMat);
+            }
+        }
+
         std::unordered_map<Vertex, uint16_t> uniqueVertices{};
 
         for (const auto& shape : shapes) {
@@ -103,13 +139,13 @@ namespace slate {
 
             for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
                 size_t fv = shape.mesh.num_face_vertices[f];
-
-                glm::vec3 faceColor(0.8f, 0.8f, 0.8f);
                 int materialId = shape.mesh.material_ids[f];
 
+                glm::vec3 faceColor(0.8f, 0.8f, 0.8f);
                 if (materialId >= 0 && materialId < static_cast<int>(materials.size())) {
-                    const auto& mat = materials[materialId];
-                    faceColor = glm::vec3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]);
+                    faceColor = glm::vec3(materials[materialId].diffuse[0],
+                                          materials[materialId].diffuse[1],
+                                          materials[materialId].diffuse[2]);
                 }
 
                 auto getVertex = [&](size_t v_idx) -> Vertex {
@@ -121,7 +157,24 @@ namespace slate {
                         attrib.vertices[3 * idx.vertex_index + 2]
                     };
 
-                    return Vertex(pos, faceColor);
+                    glm::vec3 normal(0.0f, 1.0f, 0.0f);
+                    if (idx.normal_index >= 0 && (3 * idx.normal_index + 2) < attrib.normals.size()) {
+                        normal = {
+                            attrib.normals[3 * idx.normal_index + 0],
+                            attrib.normals[3 * idx.normal_index + 1],
+                            attrib.normals[3 * idx.normal_index + 2]
+                        };
+                    }
+
+                    glm::vec2 texCoord(0.0f);
+                    if (idx.texcoord_index >= 0 && (2 * idx.texcoord_index + 1) < attrib.texcoords.size()) {
+                        texCoord = {
+                            attrib.texcoords[2 * idx.texcoord_index + 0],
+                            1.0f - attrib.texcoords[2 * idx.texcoord_index + 1]
+                        };
+                    }
+
+                    return Vertex{pos, faceColor, normal, texCoord};
                 };
 
                 auto addVertex = [&](const Vertex& v) -> uint16_t {
@@ -207,7 +260,7 @@ namespace slate {
         std::cout << "successfully loaded & triangulated obj: " << filePath
                   << " (" << outVertices.size() << " unique vertices, "
                   << outIndices.size() << " indices, "
-                  << materials.size() << " materials)" << std::endl;
+                  << outMaterials.size() << " materials)" << std::endl;
 
         return true;
     }

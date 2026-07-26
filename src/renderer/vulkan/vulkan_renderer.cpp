@@ -9,10 +9,12 @@
 #include <functional>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cstring>
 
 #include "renderer/vertex.hpp"
 #include "ui/ui_vertex.hpp"
 #include "ui/ui_element.hpp"
+#include "resources/mesh_loader.hpp"
 
 namespace slate {
 
@@ -35,6 +37,10 @@ namespace slate {
         createSyncObjects();
         createCommandPool();
         createCommandBuffer();
+        createDescriptorSetLayout();
+        createUniformBuffers();
+        createMaterialBuffers();
+        createDescriptorPoolAndSets();
         createGraphicsPipeline();
         createUIGraphicsPipeline();
     }
@@ -125,8 +131,17 @@ namespace slate {
         // specify the device features
         VkPhysicalDeviceFeatures deviceFeatures{};
 
+        VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
+        indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+        indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
+        indexingFeatures.runtimeDescriptorArray = VK_TRUE;
+        indexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
+        indexingFeatures.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+        indexingFeatures.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.pNext = &indexingFeatures;
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeatures;
@@ -136,6 +151,7 @@ namespace slate {
 
         if (vkCreateDevice(m_physicalDevice, &createInfo, nullptr, &m_device) != VK_SUCCESS) {
             throw std::runtime_error("failed to create logical device!");
+            throw std::runtime_error("failed to set up bindless indexing!");
         }
 
         // retrieve handles
@@ -143,6 +159,7 @@ namespace slate {
         vkGetDeviceQueue(m_device, indices.presentFamily, 0, &m_presentQueue);
 
         std::cout << "vulkan logical device created successfully!" << std::endl;
+        std::cout << "bindless indexing setup sucessfully!";
     }
 
     bool VulkanRenderer::checkDeviceExtensionSupport(VkPhysicalDevice device) {
@@ -424,6 +441,24 @@ namespace slate {
         m_uiDirty = false;
     }
 
+    void VulkanRenderer::updateMaterials(const std::vector<Material>& materials) {
+        if (materials.empty()) return;
+
+        std::vector<MaterialGPU> gpuData;
+        gpuData.reserve(materials.size());
+        for (const auto& mat : materials) {
+            gpuData.push_back(mat.gpuData);
+        }
+
+        VkDeviceSize uploadSize = sizeof(MaterialGPU) * gpuData.size();
+        
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            if (m_materialBuffersMapped[i]) {
+                std::memcpy(m_materialBuffersMapped[i], gpuData.data(), uploadSize);
+            }
+        }
+    }
+
     uint32_t VulkanRenderer::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
         VkPhysicalDeviceMemoryProperties memProperties;
         vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memProperties);
@@ -642,6 +677,43 @@ namespace slate {
         }
     }
 
+    void VulkanRenderer::updateUniformBuffer(uint32_t currentImage, const glm::vec3& cameraPos) {
+        GlobalUBO ubo{};
+        ubo.cameraPos = cameraPos;
+        ubo.lightDirection = glm::normalize(glm::vec3(1.0f, 2.0f, 1.5f)); // Sunlight direction
+        ubo.lightColor = glm::vec3(1.0f, 0.95f, 0.9f);                    // Warm sunlight
+        ubo.lightIntensity = 3.0f;
+
+        memcpy(m_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+    }
+
+    void VulkanRenderer::createBuffer(
+        VkDeviceSize size,
+        VkBufferUsageFlags usage,
+        VkMemoryPropertyFlags properties,
+        VkBuffer& buffer,
+        VkDeviceMemory& bufferMemory
+    ) {
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = size;
+        bufferInfo.usage = usage;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (vkCreateBuffer(m_device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create buffer!");
+        }
+        VkMemoryRequirements memRequirements;
+        vkGetBufferMemoryRequirements(m_device, buffer, &memRequirements);
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+        if (vkAllocateMemory(m_device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate buffer memory!");
+        }
+        vkBindBufferMemory(m_device, buffer, bufferMemory, 0);
+    }
+
     void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const glm::mat4& viewMatrix) {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -681,24 +753,56 @@ namespace slate {
         scissor.extent = m_swapchainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        // mesh drawing
+        glm::vec3 cameraPos = glm::vec3(glm::inverse(viewMatrix)[3]);
+        updateUniformBuffer(imageIndex, cameraPos);
+
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+
+        std::array<VkDescriptorSet, 2> descriptorSets = {
+            m_globalDescriptorSets[m_currentFrame],
+            m_materialDescriptorSets[m_currentFrame]
+        };
+
+        vkCmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            m_pipelineLayout,
+            0, static_cast<uint32_t>(descriptorSets.size()),
+            descriptorSets.data(),
+            0, nullptr
+        );
 
         for (const auto& mesh : m_sceneMeshes) {
             if (mesh) {
                 mesh->bind(commandBuffer);
 
                 float time = SDL_GetTicks() / 1000.0f;
-                glm::mat4 model = glm::mat4(1.0f);
-                // model = glm::rotate(model, time * glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-                // model = glm::rotate(model, time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
 
                 float aspect = static_cast<float>(m_swapchainExtent.width) / static_cast<float>(m_swapchainExtent.height);
                 glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
                 proj[1][1] *= -1.0f;
 
-                glm::mat4 transform = proj * viewMatrix * model;
-                vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+                glm::mat4 model = glm::mat4(1.0f);
+                glm::mat4 viewProj = proj * viewMatrix;
+
+                struct PushConstants {
+                    glm::mat4 modelMatrix;
+                    glm::mat4 viewProjMatrix;
+                    uint32_t materialId = 0;
+                } pushData;
+
+                pushData.modelMatrix = model;
+                pushData.viewProjMatrix = viewProj;
+
+                vkCmdPushConstants(
+                commandBuffer,
+                    m_pipelineLayout,
+                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                    0,
+                    sizeof(PushConstants),
+                    &pushData
+                );
 
                 mesh->draw(commandBuffer);
             }
@@ -882,15 +986,178 @@ namespace slate {
         return shaderModule;
     }
 
+    void VulkanRenderer::createUniformBuffers() {
+        VkDeviceSize bufferSize = sizeof(GlobalUBO);
+
+        size_t maxFrames = m_swapchainImages.size();
+        m_uniformBuffers.resize(maxFrames);
+        m_uniformBuffersMemory.resize(maxFrames);
+        m_uniformBuffersMapped.resize(maxFrames);
+
+        for (size_t i = 0; i < maxFrames; i++) {
+            createBuffer(
+                bufferSize,
+                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                m_uniformBuffers[i],
+                m_uniformBuffersMemory[i]
+            );
+
+            // persistent mapping
+            vkMapMemory(m_device, m_uniformBuffersMemory[i], 0, bufferSize, 0, &m_uniformBuffersMapped[i]);
+        }
+    }
+
+    void VulkanRenderer::createDescriptorPoolAndSets() {
+        std::array<VkDescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
+
+        if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor pool!");
+        }
+
+        std::vector<VkDescriptorSetLayout> globalLayouts(MAX_FRAMES_IN_FLIGHT, m_globalDescriptorSetLayout);
+
+        VkDescriptorSetAllocateInfo globalAllocInfo{};
+        globalAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        globalAllocInfo.descriptorPool = m_descriptorPool;
+        globalAllocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        globalAllocInfo.pSetLayouts = globalLayouts.data();
+
+        m_globalDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(m_device, &globalAllocInfo, m_globalDescriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate global descriptor sets!");
+        }
+
+        std::vector<VkDescriptorSetLayout> materialLayouts(MAX_FRAMES_IN_FLIGHT, m_materialDescriptorSetLayout);
+
+        VkDescriptorSetAllocateInfo materialAllocInfo{};
+        materialAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        materialAllocInfo.descriptorPool = m_descriptorPool;
+        materialAllocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        materialAllocInfo.pSetLayouts = materialLayouts.data();
+
+        m_materialDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(m_device, &materialAllocInfo, m_materialDescriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate material descriptor sets!");
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorBufferInfo uboBufferInfo{};
+            uboBufferInfo.buffer = m_uniformBuffers[i];
+            uboBufferInfo.offset = 0;
+            uboBufferInfo.range = sizeof(UniformBufferObject);
+
+            VkWriteDescriptorSet uboWrite{};
+            uboWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            uboWrite.dstSet = m_globalDescriptorSets[i];
+            uboWrite.dstBinding = 0;
+            uboWrite.dstArrayElement = 0;
+            uboWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            uboWrite.descriptorCount = 1;
+            uboWrite.pBufferInfo = &uboBufferInfo;
+
+            VkDescriptorBufferInfo ssboBufferInfo{};
+            ssboBufferInfo.buffer = m_materialBuffers[i];
+            ssboBufferInfo.offset = 0;
+            ssboBufferInfo.range = VK_WHOLE_SIZE;
+
+            VkWriteDescriptorSet ssboWrite{};
+            ssboWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            ssboWrite.dstSet = m_materialDescriptorSets[i];
+            ssboWrite.dstBinding = 0;
+            ssboWrite.dstArrayElement = 0;
+            ssboWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            ssboWrite.descriptorCount = 1;
+            ssboWrite.pBufferInfo = &ssboBufferInfo;
+
+            std::array<VkWriteDescriptorSet, 2> descriptorWrites = {uboWrite, ssboWrite};
+            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        }
+    }
+
+    void VulkanRenderer::createDescriptorSetLayout() {
+        // global ubo
+        VkDescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo globalLayoutInfo{};
+        globalLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        globalLayoutInfo.bindingCount = 1;
+        globalLayoutInfo.pBindings = &uboLayoutBinding;
+
+        if (vkCreateDescriptorSetLayout(m_device, &globalLayoutInfo, nullptr, &m_globalDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create global descriptor set layout!");
+        }
+
+        // ssbo
+        VkDescriptorSetLayoutBinding ssboLayoutBinding{};
+        ssboLayoutBinding.binding = 0;
+        ssboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        ssboLayoutBinding.descriptorCount = 1;
+        ssboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorBindingFlags bindingFlags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+                                                VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+
+        VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+        flagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+        flagsInfo.bindingCount = 1;
+        flagsInfo.pBindingFlags = &bindingFlags;
+
+        VkDescriptorSetLayoutCreateInfo materialLayoutInfo{};
+        materialLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        materialLayoutInfo.pNext = &flagsInfo;
+        materialLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+        materialLayoutInfo.bindingCount = 1;
+        materialLayoutInfo.pBindings = &ssboLayoutBinding;
+
+        if (vkCreateDescriptorSetLayout(m_device, &materialLayoutInfo, nullptr, &m_materialDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create material descriptor set layout!");
+        }
+    }
+
+    void VulkanRenderer::createMaterialBuffers() {
+        VkDeviceSize bufferSize = sizeof(Material) * MAX_MATERIALS;
+
+        m_materialBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        m_materialBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        m_materialBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            createBuffer(
+                bufferSize,
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                m_materialBuffers[i],
+                m_materialBuffersMemory[i]
+            );
+
+            vkMapMemory(m_device, m_materialBuffersMemory[i], 0, bufferSize, 0, &m_materialBuffersMapped[i]);
+        }
+    }
+
     void VulkanRenderer::createGraphicsPipeline() {
-        // load spir-v bytecode binaries
-        auto vertShaderCode = readFile("shaders/compiled/simple_shader.vert.spv");
-        auto fragShaderCode = readFile("shaders/compiled/simple_shader.frag.spv");
+        auto vertShaderCode = readFile("shaders/compiled/pbr.vert.spv");
+        auto fragShaderCode = readFile("shaders/compiled/pbr.frag.spv");
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
-        // assign shaders to pipeline stages
         VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
         vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -958,15 +1225,28 @@ namespace slate {
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        // pipeline layout
-        VkPushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(glm::mat4);
+        struct PushConstantData {
+            glm::mat4 modelMatrix;
+            glm::mat4 viewProjMatrix;
+            uint32_t materialIndex;
+        };
 
+        std::array<VkDescriptorSetLayout, 2> descriptorSetLayouts = {
+            m_globalDescriptorSetLayout,
+            m_materialDescriptorSetLayout
+        };
+
+        // push constant range
+        VkPushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(PushConstantData);
+
+        // descriptor set layout
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 0;
+        pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
+        pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
@@ -974,12 +1254,14 @@ namespace slate {
             throw std::runtime_error("failed to create pipeline layout!");
         }
 
+        // depth stencil
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthTestEnable = VK_TRUE;
         depthStencil.depthWriteEnable = VK_TRUE;
         depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
 
+        // dynamic state
         std::vector<VkDynamicState> dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
@@ -990,7 +1272,7 @@ namespace slate {
         dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicStateInfo.pDynamicStates = dynamicStates.data();
 
-        // put it all together
+        // pipeline info
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;
@@ -1012,7 +1294,7 @@ namespace slate {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
-        // clean up shader modules
+        // cleanup
         vkDestroyShaderModule(m_device, fragShaderModule, nullptr);
         vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
 
@@ -1037,19 +1319,19 @@ namespace slate {
         shaderStages[1].module = fragShaderModule;
         shaderStages[1].pName = "main";
 
-        // 2. Define layout attributes for UIVertex structure
+        // define layout attributes
         VkVertexInputBindingDescription bindingDescription{};
         bindingDescription.binding = 0;
         bindingDescription.stride = sizeof(UIVertex);
         bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
         VkVertexInputAttributeDescription attributeDescriptions[2]{};
-        // Position Attribute (vec2)
+        // position
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
         attributeDescriptions[0].offset = offsetof(UIVertex, pos);
-        // Color Attribute (vec4)
+        // color
         attributeDescriptions[1].binding = 0;
         attributeDescriptions[1].location = 1;
         attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -1158,6 +1440,30 @@ namespace slate {
     void VulkanRenderer::cleanup() {
         m_sceneMeshes.clear();
 
+        if (m_globalDescriptorSetLayout != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(m_device, m_globalDescriptorSetLayout, nullptr);
+            m_globalDescriptorSetLayout = VK_NULL_HANDLE;
+        }
+
+        if (m_materialDescriptorSetLayout != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(m_device, m_materialDescriptorSetLayout, nullptr);
+            m_materialDescriptorSetLayout = VK_NULL_HANDLE;
+        }
+
+        if (m_descriptorPool != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
+        }
+
+        for (size_t i = 0; i < m_uniformBuffers.size(); i++) {
+            vkUnmapMemory(m_device, m_uniformBuffersMemory[i]);
+            vkDestroyBuffer(m_device, m_uniformBuffers[i], nullptr);
+            vkFreeMemory(m_device, m_uniformBuffersMemory[i], nullptr);
+        }
+
+        if (m_descriptorSetLayout != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
+            m_descriptorSetLayout = VK_NULL_HANDLE;
+        }
         if (m_graphicsPipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(m_device, m_graphicsPipeline, nullptr);
             m_graphicsPipeline = VK_NULL_HANDLE;

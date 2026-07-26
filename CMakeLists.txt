@@ -37,6 +37,8 @@ add_executable(slate
         src/ui/ui_manager.hpp
         src/ui/ui_button.hpp
         src/ui/ui_vertex.hpp
+        src/resources/material.cpp
+        src/resources/material.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})

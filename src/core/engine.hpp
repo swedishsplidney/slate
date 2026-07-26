@@ -25,8 +25,8 @@ namespace slate {
         void cleanup();
 
         SDL_Window* m_window{nullptr};
-        const int m_width{800};
-        const int m_height{600};
+        const int m_width{1280};
+        const int m_height{720};
 
         std::unique_ptr<Renderer> m_renderer{nullptr};
 

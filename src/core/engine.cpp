@@ -16,7 +16,11 @@ namespace slate {
 
         std::vector<Vertex> loadedVertices;
         std::vector<uint16_t> loadedIndices;
-        if (MeshLoader::loadOBJ("models/test_obj.obj", loadedVertices, loadedIndices)) {
+        std::vector<Material> loadedMaterials;
+
+        if (MeshLoader::loadOBJ("models/test_obj.obj", loadedVertices, loadedIndices, loadedMaterials)) {
+            static_cast<VulkanRenderer*>(m_renderer.get())->updateMaterials(loadedMaterials);
+
             auto newMesh = std::make_unique<Mesh>(
                 static_cast<VulkanRenderer*>(m_renderer.get())->getDevice(),
                 static_cast<VulkanRenderer*>(m_renderer.get())->getPhysicalDevice(),
@@ -38,9 +42,10 @@ namespace slate {
 
                 std::vector<Vertex> loadedVertices;
                 std::vector<uint16_t> loadedIndices;
+                std::vector<Material> loadedMaterials;
 
                 // fire tinyobj loader
-                if (MeshLoader::loadOBJ("models/cube.obj", loadedVertices, loadedIndices)) {
+                if (MeshLoader::loadOBJ("models/cube.obj", loadedVertices, loadedIndices, loadedMaterials)) {
                     auto newMesh = std::make_unique<Mesh>(
                         static_cast<VulkanRenderer*>(m_renderer.get())->getDevice(),
                         static_cast<VulkanRenderer*>(m_renderer.get())->getPhysicalDevice(),
@@ -85,12 +90,11 @@ namespace slate {
         SDL_SetWindowRelativeMouseMode(m_window, m_cursorLocked);
 
         while (!shouldClose) {
-            // Calculate delta time each frame
             uint64_t currentTime = SDL_GetTicks();
             float deltaTime = (currentTime - m_lastTime) / 1000.0f;
             m_lastTime = currentTime;
 
-            // Update UI elements first (scalable tick rates)
+            // ui elements first
             if (m_uiRoot) {
                 m_uiRoot->update(deltaTime);
             }
