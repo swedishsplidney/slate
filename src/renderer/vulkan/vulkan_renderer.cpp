@@ -322,125 +322,6 @@ namespace slate {
         std::cout << "vulkan image views successfully created for each swapchain buffer!" << std::endl;
     }
 
-    void VulkanRenderer::updateUIGeometry(const std::shared_ptr<UIElement> &rootElement) {
-        if (!rootElement) return;
-        if (!m_uiDirty) return;
-
-        m_uiVerticesMemory.clear();
-        m_uiIndicesMemory.clear();
-
-        std::function<void(const std::shared_ptr<UIElement>&)> buildBatch = [&](const std::shared_ptr<UIElement>& element) {
-            if (!element) return;
-
-            // name check
-            if (element-> getName() == "RootCanvas") {
-                for (const auto& child : element->getChildren()) {
-                    buildBatch(child);
-                }
-                return;
-            }
-
-            glm::vec2 pos = element->getAbsolutePosition();
-            glm::vec2 size = element->getSize();
-
-            glm::vec4 color = glm::vec4(0.12f, 0.14f, 0.18f, 0.95f);
-            if (element->getName() == "importMeshBtn") {
-                color = glm::vec4(0.25f, 0.45f, 0.85f, 1.0f);
-            }
-
-            uint16_t baseIndex = static_cast<uint16_t>(m_uiVerticesMemory.size());
-
-            m_uiVerticesMemory.push_back(UIVertex{ {pos.x, pos.y}, color });
-            m_uiVerticesMemory.push_back(UIVertex{ {pos.x + size.x, pos.y}, color });
-            m_uiVerticesMemory.push_back(UIVertex{ {pos.x + size.x, pos.y + size.y}, color });
-            m_uiVerticesMemory.push_back(UIVertex{ {pos.x, pos.y + size.y}, color });
-
-            m_uiIndicesMemory.push_back(baseIndex + 0);
-            m_uiIndicesMemory.push_back(baseIndex + 1);
-            m_uiIndicesMemory.push_back(baseIndex + 2);
-
-            m_uiIndicesMemory.push_back(baseIndex + 2);
-            m_uiIndicesMemory.push_back(baseIndex + 3);
-            m_uiIndicesMemory.push_back(baseIndex + 0);
-
-            for (const auto& child : element->getChildren()) {
-                buildBatch(child);
-            }
-        };
-
-        buildBatch(rootElement);
-
-        if (m_uiVerticesMemory.empty() || m_uiIndicesMemory.empty()) {
-            m_uiDirty = false;
-            return;
-        }
-
-        if (m_uiVertexBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(m_device, m_uiVertexBuffer, nullptr);
-            vkFreeMemory(m_device, m_uiVertexBufferMemory, nullptr);
-        }
-        if (m_uiIndexBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(m_device, m_uiIndexBuffer, nullptr);
-            vkFreeMemory(m_device, m_uiIndexBufferMemory, nullptr);
-        }
-
-        VkDeviceSize vertexBufferSize = sizeof(UIVertex) * m_uiVerticesMemory.size();
-        VkDeviceSize indexBufferSize = sizeof(uint16_t) * m_uiIndicesMemory.size();
-
-        auto createLocalBuffer = [&](VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer, VkDeviceMemory& memory) {
-            VkBufferCreateInfo bufferInfo{};
-            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bufferInfo.size = size;
-            bufferInfo.usage = usage;
-            bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-            if (vkCreateBuffer(m_device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create UI buffer!");
-            }
-
-            VkMemoryRequirements memRequirements;
-            vkGetBufferMemoryRequirements(m_device, buffer, &memRequirements);
-
-            VkPhysicalDeviceMemoryProperties memProperties;
-            vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memProperties);
-
-            uint32_t memoryTypeIndex = 0;
-            VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-            for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-                if ((memRequirements.memoryTypeBits & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-                    memoryTypeIndex = i;
-                    break;
-                }
-            }
-
-            VkMemoryAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            allocInfo.allocationSize = memRequirements.size;
-            allocInfo.memoryTypeIndex = memoryTypeIndex;
-
-            if (vkAllocateMemory(m_device, &allocInfo, nullptr, &memory) != VK_SUCCESS) {
-                throw std::runtime_error("failed to allocate UI buffer memory!");
-            }
-
-            vkBindBufferMemory(m_device, buffer, memory, 0);
-        };
-
-        createLocalBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, m_uiVertexBuffer, m_uiVertexBufferMemory);
-        createLocalBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, m_uiIndexBuffer, m_uiIndexBufferMemory);
-
-        void* data;
-        vkMapMemory(m_device, m_uiVertexBufferMemory, 0, vertexBufferSize, 0, &data);
-        memcpy(data, m_uiVerticesMemory.data(), (size_t)vertexBufferSize);
-        vkUnmapMemory(m_device, m_uiVertexBufferMemory);
-
-        vkMapMemory(m_device, m_uiIndexBufferMemory, 0, indexBufferSize, 0, &data);
-        memcpy(data, m_uiIndicesMemory.data(), (size_t)indexBufferSize);
-        vkUnmapMemory(m_device, m_uiIndexBufferMemory);
-
-        // reset flag
-        m_uiDirty = false;
-    }
-
     void VulkanRenderer::updateMaterials(const std::vector<Material>& materials) {
         if (materials.empty()) return;
 
@@ -722,17 +603,16 @@ namespace slate {
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = {{0.025f, 0.025f, 0.025f, 1.0f}};
+        clearValues[1].depthStencil = {1.0f, 0};
+
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         renderPassInfo.renderPass = m_renderPass;
         renderPassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = m_swapchainExtent;
-
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = {{0.018f, 0.021f, 0.027f, 1.0f}};
-        clearValues[1].depthStencil = {1.0f, 0};
-
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
 
@@ -814,7 +694,8 @@ namespace slate {
 
             float width = static_cast<float>(m_swapchainExtent.width);
             float height = static_cast<float>(m_swapchainExtent.height);
-            glm::mat4 orthoProj = glm::ortho(0.0f, width, height, 0.0f, -1.0f, 1.0f);
+
+            glm::mat4 uiProj = glm::ortho(0.0f, width, 0.0f, height, -1.0f, 1.0f);
 
             vkCmdPushConstants(
                 commandBuffer,
@@ -822,11 +703,11 @@ namespace slate {
                 VK_SHADER_STAGE_VERTEX_BIT,
                 0,
                 sizeof(glm::mat4),
-                &orthoProj
+                &uiProj
             );
 
-            VkBuffer vertexBuffers[] = { m_uiVertexBuffer };
-            VkDeviceSize offsets[] = { 0 };
+            VkBuffer vertexBuffers[] = {m_uiVertexBuffer};
+            VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
             vkCmdBindIndexBuffer(commandBuffer, m_uiIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
@@ -1360,7 +1241,7 @@ namespace slate {
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.cullMode = VK_CULL_MODE_NONE;
         rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -1388,8 +1269,8 @@ namespace slate {
 
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthTestEnable = VK_FALSE;
+        depthStencil.depthWriteEnable = VK_FALSE;
         depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
 
         std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
@@ -1435,6 +1316,119 @@ namespace slate {
         vkDestroyShaderModule(m_device, fragShaderModule, nullptr);
         vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
         std::cout << "vulkan UI graphics pipeline successfully compiled!" << std::endl;
+    }
+
+    void VulkanRenderer::updateUIGeometryBuffers(const std::vector<UIVertex>& vertices, const std::vector<uint16_t>& indices) {
+        if (vertices.empty() || indices.empty()) {
+            m_uiVerticesMemory.clear();
+            m_uiIndicesMemory.clear();
+            return;
+        }
+
+        m_uiVerticesMemory = vertices;
+        m_uiIndicesMemory = indices;
+
+        VkDeviceSize vertexBufferSize = sizeof(UIVertex) * vertices.size();
+        VkDeviceSize indexBufferSize = sizeof(uint16_t) * indices.size();
+
+        if (m_uiVertexBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(m_device, m_uiVertexBuffer, nullptr);
+            vkFreeMemory(m_device, m_uiVertexBufferMemory, nullptr);
+        }
+        if (m_uiIndexBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(m_device, m_uiIndexBuffer, nullptr);
+            vkFreeMemory(m_device, m_uiIndexBufferMemory, nullptr);
+        }
+
+        VkBuffer stagingVertexBuffer;
+        VkDeviceMemory stagingVertexBufferMemory;
+        createBuffer(
+            vertexBufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingVertexBuffer,
+            stagingVertexBufferMemory
+        );
+
+        void* data;
+        vkMapMemory(m_device, stagingVertexBufferMemory, 0, vertexBufferSize, 0, &data);
+        memcpy(data, vertices.data(), (size_t)vertexBufferSize);
+        vkUnmapMemory(m_device, stagingVertexBufferMemory);
+
+        createBuffer(
+            vertexBufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            m_uiVertexBuffer,
+            m_uiVertexBufferMemory
+        );
+
+        copyBuffer(stagingVertexBuffer, m_uiVertexBuffer, vertexBufferSize);
+
+        vkDestroyBuffer(m_device, stagingVertexBuffer, nullptr);
+        vkFreeMemory(m_device, stagingVertexBufferMemory, nullptr);
+
+        VkBuffer stagingIndexBuffer;
+        VkDeviceMemory stagingIndexBufferMemory;
+        createBuffer(
+            indexBufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingIndexBuffer,
+            stagingIndexBufferMemory
+        );
+
+        vkMapMemory(m_device, stagingIndexBufferMemory, 0, indexBufferSize, 0, &data);
+        memcpy(data, indices.data(), (size_t)indexBufferSize);
+        vkUnmapMemory(m_device, stagingIndexBufferMemory);
+
+        createBuffer(
+            indexBufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            m_uiIndexBuffer,
+            m_uiIndexBufferMemory
+        );
+
+        copyBuffer(stagingIndexBuffer, m_uiIndexBuffer, indexBufferSize);
+
+        vkDestroyBuffer(m_device, stagingIndexBuffer, nullptr);
+        vkFreeMemory(m_device, stagingIndexBufferMemory, nullptr);
+    }
+
+    void VulkanRenderer::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandPool = m_commandPool;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer commandBuffer;
+        vkAllocateCommandBuffers(m_device, &allocInfo, &commandBuffer);
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+        VkBufferCopy copyRegion{};
+        copyRegion.srcOffset = 0;
+        copyRegion.dstOffset = 0;
+        copyRegion.size = size;
+        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+        vkEndCommandBuffer(commandBuffer);
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+
+        vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(m_graphicsQueue);
+
+        vkFreeCommandBuffers(m_device, m_commandPool, 1, &commandBuffer);
     }
 
     void VulkanRenderer::cleanup() {

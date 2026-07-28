@@ -3,6 +3,7 @@
 #include <memory>
 #include <SDL3/SDL.h>
 #include "ui/ui_element.hpp"
+#include "ui/ui_manager.hpp"
 
 #include "camera.hpp"
 #include "renderer/renderer.hpp"
@@ -24,6 +25,8 @@ namespace slate {
         void mainLoop();
         void cleanup();
 
+        bool isPointInElement(glm::vec2 point, const std::shared_ptr<UIElement>& element);
+
         SDL_Window* m_window{nullptr};
         const int m_width{1280};
         const int m_height{720};
@@ -32,9 +35,13 @@ namespace slate {
 
         Camera m_camera{glm::vec3(0.0f, 0.0f, 4.0f)};
         uint64_t m_lastTime{0};
-        bool m_cursorLocked{true};
+        bool m_cursorLocked{false};
+        
+        std::shared_ptr<UIElement> m_viewportPanel{nullptr};
+        bool m_viewportFocused{false};
+        bool m_rightClickDragging{false};
 
-        std::shared_ptr<UIElement> m_uiRoot;
+        std::unique_ptr<UIManager> m_uiManager;
     };
 
 }

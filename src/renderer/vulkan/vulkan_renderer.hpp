@@ -59,7 +59,7 @@ namespace slate {
 
         void addMeshToScene(std::unique_ptr<Mesh> mesh) { m_sceneMeshes.push_back(std::move(mesh)); }
 
-        void updateUIGeometry(const std::shared_ptr<UIElement>& rootElement);
+        void updateUIGeometryBuffers(const std::vector<UIVertex>& vertices, const std::vector<uint16_t>& indices);
 
         void updateMaterials(const std::vector<Material>& materials);
 
@@ -178,6 +178,8 @@ namespace slate {
         void createMaterialBuffers();
 
         uint32_t m_currentFrame = 0;
+
+        void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     };
 
 }

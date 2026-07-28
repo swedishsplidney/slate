@@ -21,10 +21,22 @@ namespace slate {
         virtual void update(float deltaTime);
         virtual void onEvent(const SDL_Event& event);
 
-        // getters
+        // getters & setters
         const std::string& getName() const { return m_name; }
         glm::vec2 getAbsolutePosition() const;
         glm::vec2 getSize() const { return m_size; }
+
+        void setPosition(glm::vec2 position) { m_position = position; }
+        virtual void setSize(glm::vec2 size) { m_size = size; }
+
+        glm::vec4 getColor() const { return m_color; }
+        void setColor(glm::vec4 color) { m_color = color; }
+
+        bool isVisible() const { return m_visible; }
+        void setVisible(bool visible) { m_visible = visible; }
+
+        bool drawsBackground() const { return m_drawsBackground; }
+        void setDrawsBackground(bool draw) { m_drawsBackground = draw; }
 
         const std::vector<std::shared_ptr<UIElement>>& getChildren() const { return m_children; }
 
@@ -32,6 +44,10 @@ namespace slate {
         std::string m_name;
         glm::vec2 m_position;
         glm::vec2 m_size;
+
+        glm::vec4 m_color{0.15f, 0.16f, 0.20f, 0.95f};
+        bool m_visible{true};
+        bool m_drawsBackground{false};
 
         std::weak_ptr<UIElement> m_parent;
         std::vector<std::shared_ptr<UIElement>> m_children;

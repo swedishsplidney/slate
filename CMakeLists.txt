@@ -39,6 +39,16 @@ add_executable(slate
         src/ui/ui_vertex.hpp
         src/resources/material.cpp
         src/resources/material.hpp
+        src/ui/ui_manager.cpp
+        src/ui/ui_dockspace.hpp
+        external/stb/stb_truetype.cpp
+        src/resources/font_loader.hpp
+        src/resources/font_loader.cpp
+        src/core/commands/command.hpp
+        src/core/commands/command_registry.cpp
+        src/core/commands/command_registry.hpp
+        src/core/commands/command_history.cpp
+        src/core/commands/command_history.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
@@ -60,6 +70,7 @@ target_include_directories(slate PRIVATE
         ${Vulkan_INCLUDE_DIRS}
         external/tinyobjloader
         external/earcut
+        external/stb
 )
 
 target_link_libraries(slate PRIVATE
