@@ -5,7 +5,9 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <cstdint> // <-- For uint16_t
 #include <SDL3/SDL_events.h>
+#include "ui/ui_vertex.hpp"
 
 namespace slate {
 
@@ -20,6 +22,8 @@ namespace slate {
         // lifecycle methods
         virtual void update(float deltaTime);
         virtual void onEvent(const SDL_Event& event);
+
+        virtual void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices);
 
         // getters & setters
         const std::string& getName() const { return m_name; }

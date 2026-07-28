@@ -7,6 +7,7 @@
 
 #include "camera.hpp"
 #include "renderer/renderer.hpp"
+#include "core/commands/command_registry.hpp"
 
 namespace slate {
 
@@ -22,6 +23,7 @@ namespace slate {
 
     private:
         void initWindow();
+        void registerDefaultCommands();
         void mainLoop();
         void cleanup();
 
@@ -41,7 +43,9 @@ namespace slate {
         bool m_viewportFocused{false};
         bool m_rightClickDragging{false};
 
-        std::unique_ptr<UIManager> m_uiManager;
+        std::unique_ptr<UIManager> m_uiManager{nullptr};
+        std::unique_ptr<CommandRegistry> m_commandRegistry{nullptr};
+        CommandContext m_commandContext{};
     };
 
 }

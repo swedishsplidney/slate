@@ -1,16 +1,31 @@
-//
-// Created by kipnh on 7/27/26.
-//
+#pragma once
 
-#ifndef SLATE_COMMAND_REGISTRY_HPP
-#define SLATE_COMMAND_REGISTRY_HPP
+#include "command.hpp"
+#include "command_history.hpp"
+#include <unordered_map>
+#include <functional>
+#include <string>
+#include <memory>
 
+namespace slate {
 
+    class CommandRegistry {
+    public:
+        using CommandArgs = std::vector<std::string>;
+        using CommandFactory = std::function<std::unique_ptr<ICommand>(const CommandArgs&)>;
 
-class command_registry {
+        CommandRegistry() = default;
+        ~CommandRegistry() = default;
 
-};
+        void registerCommand(const std::string& commandId, CommandFactory factory);
 
+        bool execute(const std::string& commandId, const CommandContext& context, const CommandArgs& args = {});
 
+        CommandHistory& getHistory() { return m_history; }
 
-#endif //SLATE_COMMAND_REGISTRY_HPP
+    private:
+        std::unordered_map<std::string, CommandFactory> m_factories;
+        CommandHistory m_history{100};
+    };
+
+}

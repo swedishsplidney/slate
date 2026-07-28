@@ -49,6 +49,10 @@ add_executable(slate
         src/core/commands/command_registry.hpp
         src/core/commands/command_history.cpp
         src/core/commands/command_history.hpp
+        src/core/commands/file_commands.hpp
+        src/core/commands/file_commands.cpp
+        src/ui/ui_menu_bar.cpp
+        src/ui/ui_menu_bar.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
@@ -71,6 +75,7 @@ target_include_directories(slate PRIVATE
         external/tinyobjloader
         external/earcut
         external/stb
+        external/pfd
 )
 
 target_link_libraries(slate PRIVATE
@@ -79,8 +84,15 @@ target_link_libraries(slate PRIVATE
         glm::glm
 )
 
-# copy assets
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/models"
-        DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+add_custom_command(
+        TARGET slate POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        "${CMAKE_CURRENT_BINARY_DIR}/assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/models"
+        "${CMAKE_CURRENT_BINARY_DIR}/models"
+        COMMENT "copying assets and models to build output directory..."
+)
 
 message(STATUS "slate engine configured successfully with SDL3!")

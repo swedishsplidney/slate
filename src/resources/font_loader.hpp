@@ -41,7 +41,8 @@ namespace slate {
         int m_atlasWidth{512};
         int m_atlasHeight{512};
         std::vector<unsigned char> m_atlasBitmap;
-        stbtt_bakedchar m_cdata[96]; // ascii
+        stbtt_bakedchar m_cdata[96];
+        stbtt_fontinfo m_fontInfo;
     };
 
 }

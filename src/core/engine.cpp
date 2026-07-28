@@ -4,6 +4,9 @@
 #include "ui/ui_manager.hpp"
 #include "ui/ui_dockspace.hpp"
 #include "ui/ui_button.hpp"
+#include "core/commands/file_commands.hpp"
+#include "ui/ui_menu_bar.hpp"
+
 #include <stdexcept>
 #include <SDL3/SDL_vulkan.h>
 #include <iostream>
@@ -28,6 +31,15 @@ namespace slate {
         m_uiManager = std::make_unique<UIManager>();
         m_uiManager->init(static_cast<float>(m_width), static_cast<float>(m_height));
 
+        m_uiManager->loadFont("inter", "assets/fonts/Inter-4.1/InterVariable.ttf", 16.0f);
+        m_uiManager->loadFont("jetbrains", "assets/fonts/JetBrains_Mono/JetBrainsMono-VariableFont_wght.ttf", 15.0f);
+
+        m_commandRegistry = std::make_unique<CommandRegistry>();
+        m_commandContext.renderer = static_cast<VulkanRenderer*>(m_renderer.get());
+        m_commandContext.uiManager = m_uiManager.get();
+
+        registerDefaultCommands();
+
         // dockspace layout
         auto mainDockSpace = std::make_shared<UIDockSpace>(
             "MainDockSpace",
@@ -36,35 +48,55 @@ namespace slate {
         );
 
         // top bar
-        auto topBar = std::make_shared<UIElement>("TopBar", glm::vec2(0.0f), glm::vec2(0.0f));
-        topBar->setDrawsBackground(true);
-        topBar->setColor(glm::vec4(0.010f, 0.011f, 0.013f, 1.0f));
-        mainDockSpace->addDockedChild(topBar, DockSlot::TopBar, 30.0f);
+        auto menuBar = std::make_shared<UIMenuBar>("MainMenuBar", glm::vec2(0.0f), glm::vec2(0.0f));
+        menuBar->setUIManager(m_uiManager.get());
+
+        auto fontLoader = m_uiManager->getFont("jetbrains");
+        if (fontLoader) {
+            menuBar->setFontLoader(fontLoader);
+
+            auto vkRenderer = static_cast<VulkanRenderer*>(m_renderer.get());
+            vkRenderer->createFontTexture(
+                fontLoader->getAtlasBitmap().data(),
+                fontLoader->getAtlasWidth(),
+                fontLoader->getAtlasHeight()
+            );
+            vkRenderer->createUIDescriptorSet();
+        }
+
+        mainDockSpace->addDockedChild(menuBar, DockSlot::TopBar, 30.0f);
+
+        menuBar->setOnCommandTriggered([this](const std::string& commandId) {
+            m_commandRegistry->execute(commandId, m_commandContext);
+        });
+
+        MenuHeader fileMenu{"File", {
+        {"Import Mesh...", "file.import_mesh", "Ctrl+I"},
+        {"", "", "", true},
+        {"Exit", "engine.exit", "Alt+F4"}
+        }};
+
+        MenuHeader editMenu{"Edit", {
+        {"Undo", "editor.undo", "Ctrl+Z"},
+        {"Redo", "editor.redo", "Ctrl+Y"}
+        }};
+
+        MenuHeader viewMenu{"View", {
+        {"Reset Layout", "ui.reset_layout", ""}
+        }};
+
+        menuBar->addMenu(fileMenu);
+        menuBar->addMenu(editMenu);
+        menuBar->addMenu(viewMenu);
 
         auto importButton = std::make_shared<UIButton>(
             "importMeshBtn",
             glm::vec2(10.0f, 3.0f),
             glm::vec2(120.0f, 24.0f),
             [this]() {
-                std::cout << "[UI] Importing mesh into viewport..." << std::endl;
-
-                std::vector<Vertex> loadedVertices;
-                std::vector<uint16_t> loadedIndices;
-                std::vector<Material> loadedMaterials;
-
-                if (MeshLoader::loadOBJ("models/cube.obj", loadedVertices, loadedIndices, loadedMaterials)) {
-                    auto newMesh = std::make_unique<Mesh>(
-                        static_cast<VulkanRenderer*>(m_renderer.get())->getDevice(),
-                        static_cast<VulkanRenderer*>(m_renderer.get())->getPhysicalDevice(),
-                        loadedVertices,
-                        loadedIndices
-                    );
-                    static_cast<VulkanRenderer*>(m_renderer.get())->addMeshToScene(std::move(newMesh));
-                    m_uiManager->markDirty();
-                }
+                m_commandRegistry->execute("file.import_mesh", m_commandContext);
             }
         );
-        topBar->addChild(importButton);
 
         // bottom bar
         auto bottomBar = std::make_shared<UIElement>("BottomBar", glm::vec2(0.0f), glm::vec2(0.0f));
@@ -89,26 +121,23 @@ namespace slate {
         mainDockSpace->addDockedChild(m_viewportPanel, DockSlot::Center, 0.0f);
 
         m_uiManager->setRootElement(mainDockSpace);
-
         m_uiManager->markDirty();
 
-        std::vector<Vertex> loadedVertices;
-        std::vector<uint16_t> loadedIndices;
-        std::vector<Material> loadedMaterials;
-
-        if (MeshLoader::loadOBJ("models/test_obj.obj", loadedVertices, loadedIndices, loadedMaterials)) {
-            static_cast<VulkanRenderer*>(m_renderer.get())->updateMaterials(loadedMaterials);
-
-            auto newMesh = std::make_unique<Mesh>(
-                static_cast<VulkanRenderer*>(m_renderer.get())->getDevice(),
-                static_cast<VulkanRenderer*>(m_renderer.get())->getPhysicalDevice(),
-                loadedVertices,
-                loadedIndices
-            );
-            static_cast<VulkanRenderer*>(m_renderer.get())->addMeshToScene(std::move(newMesh));
-        }
+        m_commandRegistry->execute("file.import_mesh", m_commandContext, {"models/test_obj.obj"});
 
         m_cursorLocked = false;
+    }
+
+    void Engine::registerDefaultCommands() {
+        m_commandRegistry->registerCommand("file.import_mesh", [](const CommandRegistry::CommandArgs& args) {
+            std::string path = args.empty() ? "" : args[0];
+            return std::make_unique<ImportMeshCommand>(path);
+        });
+
+        m_commandRegistry->registerCommand("editor.undo", [this](const CommandRegistry::CommandArgs&) {
+            m_commandRegistry->getHistory().undo(m_commandContext);
+            return nullptr;
+        });
     }
 
     Engine::~Engine() {
@@ -144,7 +173,6 @@ namespace slate {
             float deltaTime = (currentTime - m_lastTime) / 1000.0f;
             m_lastTime = currentTime;
 
-            // update ui
             if (m_uiManager) {
                 m_uiManager->update(deltaTime);
             }
@@ -158,15 +186,22 @@ namespace slate {
                     m_uiManager->onEvent(event);
                 }
 
-                // toggle cursor lock
-                if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_ESCAPE) {
-                    m_cursorLocked = false;
-                    m_rightClickDragging = false;
-                    m_viewportFocused = false;
-                    SDL_SetWindowRelativeMouseMode(m_window, false);
+                // global shortcuts
+                if (event.type == SDL_EVENT_KEY_DOWN) {
+                    if (event.key.scancode == SDL_SCANCODE_ESCAPE) {
+                        m_cursorLocked = false;
+                        m_rightClickDragging = false;
+                        m_viewportFocused = false;
+                        SDL_SetWindowRelativeMouseMode(m_window, false);
+                    }
+
+                    // ctrl z
+                    if ((event.key.mod & SDL_KMOD_CTRL) && event.key.scancode == SDL_SCANCODE_Z) {
+                        m_commandRegistry->getHistory().undo(m_commandContext);
+                    }
                 }
 
-                // mouse button press handling
+                // mouse press handling
                 if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
                     glm::vec2 mousePos{event.button.x, event.button.y};
                     bool clickInsideViewport = isPointInElement(mousePos, m_viewportPanel);
@@ -183,7 +218,7 @@ namespace slate {
                     }
                 }
 
-                // mouse button release handling
+                // mouse release handling
                 if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
                     if (event.button.button == SDL_BUTTON_RIGHT) {
                         m_rightClickDragging = false;
@@ -202,19 +237,16 @@ namespace slate {
                     }
                 }
 
-                // cursor lock
                 if (m_cursorLocked && event.type == SDL_EVENT_MOUSE_MOTION) {
                     m_camera.processMouseMovement(event.motion.xrel, -event.motion.yrel);
                 }
             }
 
-            // wasd controls active
             if (m_viewportFocused || m_rightClickDragging) {
                 const bool* keyboardState = SDL_GetKeyboardState(nullptr);
                 m_camera.processKeyboard(keyboardState, deltaTime);
             }
 
-            // rebuild ui
             if (m_uiManager && m_uiManager->isDirty()) {
                 m_uiManager->rebuildGeometry();
 

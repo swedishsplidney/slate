@@ -42,7 +42,10 @@ namespace slate {
         createMaterialBuffers();
         createDescriptorPoolAndSets();
         createGraphicsPipeline();
+        createUIDescriptorSetLayout();
         createUIGraphicsPipeline();
+        createFontTexture();
+        createUIDescriptorSet();
     }
 
     void VulkanRenderer::pickPhysicalDevice() {
@@ -692,6 +695,17 @@ namespace slate {
         if (m_uiVertexBuffer != VK_NULL_HANDLE && !m_uiIndicesMemory.empty()) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiGraphicsPipeline);
 
+            vkCmdBindDescriptorSets(
+                commandBuffer,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                m_uiPipelineLayout,
+                0,
+                1,
+                &m_uiDescriptorSet,
+                0,
+                nullptr
+            );
+
             float width = static_cast<float>(m_swapchainExtent.width);
             float height = static_cast<float>(m_swapchainExtent.height);
 
@@ -890,19 +904,22 @@ namespace slate {
     }
 
     void VulkanRenderer::createDescriptorPoolAndSets() {
-        std::array<VkDescriptorPoolSize, 2> poolSizes{};
+        std::array<VkDescriptorPoolSize, 3> poolSizes{};
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
+        poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[2].descriptorCount = 10;
+
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 10);
 
         if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
@@ -1182,6 +1199,182 @@ namespace slate {
         std::cout << "vulkan graphics pipeline successfully compiled!" << std::endl;
     }
 
+    void VulkanRenderer::createUIDescriptorSetLayout() {
+        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+        samplerLayoutBinding.binding = 0;
+        samplerLayoutBinding.descriptorCount = 1;
+        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerLayoutBinding.pImmutableSamplers = nullptr;
+        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &samplerLayoutBinding;
+
+        if (vkCreateDescriptorSetLayout(m_device, &layoutInfo, nullptr, &m_uiDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create UI descriptor set layout!");
+        }
+    }
+
+    void VulkanRenderer::createUIDescriptorSet() {
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = m_descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &m_uiDescriptorSetLayout;
+
+        if (vkAllocateDescriptorSets(m_device, &allocInfo, &m_uiDescriptorSet) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate UI descriptor set!");
+        }
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = m_fontImageView;
+        imageInfo.sampler = m_fontSampler;
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = m_uiDescriptorSet;
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(m_device, 1, &descriptorWrite, 0, nullptr);
+    }
+
+    void VulkanRenderer::createFontTexture(const unsigned char* pixels, uint32_t width, uint32_t height) {
+        if (m_fontSampler != VK_NULL_HANDLE) { vkDestroySampler(m_device, m_fontSampler, nullptr); m_fontSampler = VK_NULL_HANDLE; }
+        if (m_fontImageView != VK_NULL_HANDLE) { vkDestroyImageView(m_device, m_fontImageView, nullptr); m_fontImageView = VK_NULL_HANDLE; }
+        if (m_fontImage != VK_NULL_HANDLE) { vkDestroyImage(m_device, m_fontImage, nullptr); m_fontImage = VK_NULL_HANDLE; }
+        if (m_fontImageMemory != VK_NULL_HANDLE) { vkFreeMemory(m_device, m_fontImageMemory, nullptr); m_fontImageMemory = VK_NULL_HANDLE; }
+
+        std::vector<uint8_t> rgbaBuffer;
+
+        if (!pixels || width == 0 || height == 0) {
+            width = 1;
+            height = 1;
+            rgbaBuffer = {255, 255, 255, 255};
+        } else {
+            rgbaBuffer.resize(width * height * 4);
+            for (size_t i = 0; i < width * height; ++i) {
+                uint8_t alpha = pixels[i];
+                rgbaBuffer[i * 4 + 0] = 255;
+                rgbaBuffer[i * 4 + 1] = 255;
+                rgbaBuffer[i * 4 + 2] = 255;
+                rgbaBuffer[i * 4 + 3] = alpha;
+            }
+        }
+
+        VkDeviceSize imageSize = width * height * 4;
+
+        createImage(
+            width, height,
+            VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            m_fontImage,
+            m_fontImageMemory
+        );
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(
+            imageSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer,
+            stagingBufferMemory
+        );
+
+        void* data;
+        vkMapMemory(m_device, stagingBufferMemory, 0, imageSize, 0, &data);
+        memcpy(data, rgbaBuffer.data(), static_cast<size_t>(imageSize));
+        vkUnmapMemory(m_device, stagingBufferMemory);
+        
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandPool = m_commandPool;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer cmd;
+        vkAllocateCommandBuffers(m_device, &allocInfo, &cmd);
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(cmd, &beginInfo);
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_fontImage;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = {0, 0, 0};
+        region.imageExtent = {width, height, 1};
+
+        vkCmdCopyBufferToImage(cmd, stagingBuffer, m_fontImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        vkEndCommandBuffer(cmd);
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+
+        vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(m_graphicsQueue);
+
+        vkFreeCommandBuffers(m_device, m_commandPool, 1, &cmd);
+        vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+        vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+
+        m_fontImageView = createImageView(m_fontImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+        if (vkCreateSampler(m_device, &samplerInfo, nullptr, &m_fontSampler) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create UI font sampler!");
+        }
+    }
+
     void VulkanRenderer::createUIGraphicsPipeline() {
         auto vertShaderCode = readFile("shaders/compiled/ui.vert.spv");
         auto fragShaderCode = readFile("shaders/compiled/ui.frag.spv");
@@ -1200,35 +1393,41 @@ namespace slate {
         shaderStages[1].module = fragShaderModule;
         shaderStages[1].pName = "main";
 
-        // define layout attributes
         VkVertexInputBindingDescription bindingDescription{};
         bindingDescription.binding = 0;
         bindingDescription.stride = sizeof(UIVertex);
         bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-        VkVertexInputAttributeDescription attributeDescriptions[2]{};
+        VkVertexInputAttributeDescription attributeDescriptions[3]{};
+
         // position
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
         attributeDescriptions[0].offset = offsetof(UIVertex, pos);
+
         // color
         attributeDescriptions[1].binding = 0;
         attributeDescriptions[1].location = 1;
         attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
         attributeDescriptions[1].offset = offsetof(UIVertex, color);
 
+        // uv
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[2].offset = offsetof(UIVertex, uv);
+
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vertexInputInfo.vertexBindingDescriptionCount = 1;
         vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        vertexInputInfo.vertexAttributeDescriptionCount = 2;
+        vertexInputInfo.vertexAttributeDescriptionCount = 3;
         vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
 
         VkPipelineViewportStateCreateInfo viewportState{};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1237,20 +1436,15 @@ namespace slate {
 
         VkPipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = VK_CULL_MODE_NONE;
         rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizer.depthBiasEnable = VK_FALSE;
 
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-        // alpha blending
         VkPipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         colorBlendAttachment.blendEnable = VK_TRUE;
@@ -1263,7 +1457,6 @@ namespace slate {
 
         VkPipelineColorBlendStateCreateInfo colorBlending{};
         colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlending.logicOpEnable = VK_FALSE;
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
@@ -1271,7 +1464,6 @@ namespace slate {
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthTestEnable = VK_FALSE;
         depthStencil.depthWriteEnable = VK_FALSE;
-        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
 
         std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
         VkPipelineDynamicStateCreateInfo dynamicState{};
@@ -1288,6 +1480,9 @@ namespace slate {
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &m_uiDescriptorSetLayout;
 
         if (vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &m_uiPipelineLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create UI pipeline layout!");
@@ -1433,6 +1628,25 @@ namespace slate {
 
     void VulkanRenderer::cleanup() {
         m_sceneMeshes.clear();
+
+        if (m_fontSampler != VK_NULL_HANDLE) {
+            vkDestroySampler(m_device, m_fontSampler, nullptr);
+            m_fontSampler = VK_NULL_HANDLE;
+        }
+        if (m_fontImageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(m_device, m_fontImageView, nullptr);
+            m_fontImageView = VK_NULL_HANDLE;
+        }
+        if (m_fontImage != VK_NULL_HANDLE) {
+            vkDestroyImage(m_device, m_fontImage, nullptr);
+            m_fontImage = VK_NULL_HANDLE;
+        }
+        if (m_fontImageMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(m_device, m_fontImageMemory, nullptr);
+            m_fontImageMemory = VK_NULL_HANDLE;
+        }
+
+        vkDestroyDescriptorSetLayout(m_device, m_uiDescriptorSetLayout, nullptr);
 
         if (m_globalDescriptorSetLayout != VK_NULL_HANDLE) {
             vkDestroyDescriptorSetLayout(m_device, m_globalDescriptorSetLayout, nullptr);

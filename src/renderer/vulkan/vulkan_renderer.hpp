@@ -57,11 +57,17 @@ namespace slate {
 
         void framebufferResized() { m_framebufferResized = true; }
 
-        void addMeshToScene(std::unique_ptr<Mesh> mesh) { m_sceneMeshes.push_back(std::move(mesh)); }
+        uint32_t addMeshToScene(std::unique_ptr<Mesh> mesh) {
+            m_sceneMeshes.push_back(std::move(mesh));
+            return static_cast<uint32_t>(m_sceneMeshes.size() - 1);
+        }
 
         void updateUIGeometryBuffers(const std::vector<UIVertex>& vertices, const std::vector<uint16_t>& indices);
 
         void updateMaterials(const std::vector<Material>& materials);
+
+        void createFontTexture(const unsigned char* pixels = nullptr, uint32_t width = 0, uint32_t height = 0);
+        void createUIDescriptorSet();
 
     private:
         void createInstance();
@@ -102,6 +108,8 @@ namespace slate {
         VkCommandPool m_commandPool{VK_NULL_HANDLE};
         VkCommandBuffer m_commandBuffer{VK_NULL_HANDLE};
         VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_uiDescriptorSetLayout = VK_NULL_HANDLE;
+        VkDescriptorSet m_uiDescriptorSet = VK_NULL_HANDLE;
         VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
         VkPipeline m_graphicsPipeline{VK_NULL_HANDLE};
 
@@ -180,6 +188,13 @@ namespace slate {
         uint32_t m_currentFrame = 0;
 
         void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+
+        VkImage m_fontImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_fontImageMemory = VK_NULL_HANDLE;
+        VkImageView m_fontImageView = VK_NULL_HANDLE;
+        VkSampler m_fontSampler = VK_NULL_HANDLE;
+
+        void createUIDescriptorSetLayout();
     };
 
 }

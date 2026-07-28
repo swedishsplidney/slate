@@ -1,5 +1,6 @@
 #include "ui/ui_manager.hpp"
 #include <functional>
+#include <iostream>
 
 namespace slate {
 
@@ -40,36 +41,46 @@ namespace slate {
         m_vertices.clear();
         m_indices.clear();
 
-        std::function<void(const std::shared_ptr<UIElement>&)> appendElementGeometry =
-            [&](const std::shared_ptr<UIElement>& element) {
+        std::function<void(const std::shared_ptr<UIElement>&, bool)> appendElementGeometry =
+            [&](const std::shared_ptr<UIElement>& element, bool isOverlayPass) {
                 if (!element || !element->isVisible()) return;
 
-                if (element->drawsBackground()) {
-                    glm::vec2 pos = element->getAbsolutePosition();
-                    glm::vec2 size = element->getSize();
-                    glm::vec4 color = element->getColor();
+                bool isMenuBar = (element->getName() == "MainMenuBar");
 
-                    uint16_t baseIndex = static_cast<uint16_t>(m_vertices.size());
+                if (isOverlayPass == isMenuBar) {
+                    if (element->drawsBackground()) {
+                        glm::vec2 pos = element->getAbsolutePosition();
+                        glm::vec2 size = element->getSize();
+                        glm::vec4 color = element->getColor();
 
-                    m_vertices.push_back({ {pos.x, pos.y}, color });
-                    m_vertices.push_back({ {pos.x + size.x, pos.y}, color });
-                    m_vertices.push_back({ {pos.x + size.x, pos.y + size.y}, color });
-                    m_vertices.push_back({ {pos.x, pos.y + size.y}, color });
+                        uint16_t baseIndex = static_cast<uint16_t>(m_vertices.size());
 
-                    m_indices.push_back(baseIndex + 0);
-                    m_indices.push_back(baseIndex + 1);
-                    m_indices.push_back(baseIndex + 2);
-                    m_indices.push_back(baseIndex + 2);
-                    m_indices.push_back(baseIndex + 3);
-                    m_indices.push_back(baseIndex + 0);
+                        m_vertices.push_back(UIVertex{.pos = {pos.x, pos.y}, .color = color, .uv = {0.0f, 0.0f}});
+                        m_vertices.push_back(UIVertex{.pos = {pos.x + size.x, pos.y}, .color = color, .uv = {0.0f, 0.0f}});
+                        m_vertices.push_back(UIVertex{.pos = {pos.x + size.x, pos.y + size.y}, .color = color, .uv = {0.0f, 0.0f}});
+                        m_vertices.push_back(UIVertex{.pos = {pos.x, pos.y + size.y}, .color = color, .uv = {0.0f, 0.0f}});
+
+                        m_indices.push_back(baseIndex + 0);
+                        m_indices.push_back(baseIndex + 1);
+                        m_indices.push_back(baseIndex + 2);
+                        m_indices.push_back(baseIndex + 2);
+                        m_indices.push_back(baseIndex + 3);
+                        m_indices.push_back(baseIndex + 0);
+                    }
+
+                    element->generateGeometry(m_vertices, m_indices);
                 }
 
                 for (const auto& child : element->getChildren()) {
-                    appendElementGeometry(child);
+                    appendElementGeometry(child, isOverlayPass);
                 }
         };
 
-        appendElementGeometry(m_rootElement);
+        appendElementGeometry(m_rootElement, false);
+
+        appendElementGeometry(m_rootElement, true);
+
+        m_isDirty = false;
         m_isDirty = false;
     }
 

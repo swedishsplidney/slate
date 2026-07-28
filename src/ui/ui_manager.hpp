@@ -2,6 +2,7 @@
 
 #include "ui/ui_element.hpp"
 #include "ui/ui_vertex.hpp"
+#include "resources/font_loader.hpp"
 #include <memory>
 #include <vector>
 #include <SDL3/SDL_events.h>
@@ -33,6 +34,23 @@ namespace slate {
 
         void rebuildGeometry();
 
+        FontLoader* getFontLoader() { return &m_fontLoader; }
+
+        bool loadFont(const std::string& fontId, const std::string& path, float pixelHeight) {
+            auto loader = std::make_shared<FontLoader>();
+            if (loader->loadFont(path, pixelHeight)) {
+                m_fonts[fontId] = loader;
+                if (!m_defaultFont) m_defaultFont = loader;
+                return true;
+            }
+            return false;
+        }
+
+        std::shared_ptr<FontLoader> getFont(const std::string& fontId) {
+            auto it = m_fonts.find(fontId);
+            return (it != m_fonts.end()) ? it->second : m_defaultFont;
+        }
+
     private:
         std::shared_ptr<UIElement> m_rootElement;
         glm::vec2 m_screenSize{0.0f, 0.0f};
@@ -40,6 +58,11 @@ namespace slate {
         bool m_isDirty{true};
         std::vector<UIVertex> m_vertices;
         std::vector<uint16_t> m_indices;
+
+        FontLoader m_fontLoader;
+
+        std::unordered_map<std::string, std::shared_ptr<FontLoader>> m_fonts;
+        std::shared_ptr<FontLoader> m_defaultFont;
     };
 
 }
