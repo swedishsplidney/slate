@@ -35,45 +35,58 @@ namespace slate {
 
         std::vector<Vertex> loadedVertices;
         std::vector<uint16_t> loadedIndices;
-        std::vector<Material> loadedMaterials;
 
         bool success = false;
-
-        // Auto-detect format (easy to expand for .gltf / .stl later)
-        if (ext == ".obj") {
-            success = MeshLoader::loadOBJ(m_filePath, loadedVertices, loadedIndices, loadedMaterials);
-        } else {
-            std::cerr << "[importmeshcommand] unsupported format: " << ext << std::endl;
-            return false;
-        }
-
-        if (!success || loadedVertices.empty()) {
-            std::cerr << "[importmeshcommand] mesh loading failed or produced empty geometry.\n";
-            return false;
-        }
-
-        // 2. Upload mesh and materials to Vulkan renderer
+        
         if (context.renderer) {
-            if (!loadedMaterials.empty()) {
-                context.renderer->updateMaterials(loadedMaterials);
+            auto& globalMaterials = context.renderer->getGlobalMaterials();
+
+            size_t materialsBeforeLoad = globalMaterials.size();
+
+            if (ext == ".obj") {
+                success = MeshLoader::loadOBJ(m_filePath, loadedVertices, loadedIndices, globalMaterials);
+            } else {
+                std::cerr << "[importmeshcommand] unsupported format: " << ext << std::endl;
+                return false;
             }
+
+            if (!success || loadedVertices.empty()) {
+                std::cerr << "[importmeshcommand] mesh loading failed or produced empty geometry.\n";
+                return false;
+            }
+
+            uint32_t primaryMaterialId = 0;
+            bool isTransparent = false;
+
+            if (globalMaterials.size() > materialsBeforeLoad) {
+                const auto& primaryMat = globalMaterials[materialsBeforeLoad];
+                primaryMaterialId = primaryMat.materialId;
+
+                if (primaryMat.gpuData.transmissionFactor > 0.0f ||
+                    primaryMat.gpuData.albedoFactor.a < 1.0f) {
+                    isTransparent = true;
+                }
+            }
+
+            context.renderer->flushMaterialsToGPU();
 
             auto newMesh = std::make_unique<Mesh>(
                 context.renderer->getDevice(),
                 context.renderer->getPhysicalDevice(),
                 loadedVertices,
-                loadedIndices
+                loadedIndices,
+                primaryMaterialId,
+                isTransparent
             );
 
             m_importedMeshId = context.renderer->addMeshToScene(std::move(newMesh));
         }
 
-        // 3. Mark UI dirty so the frame refreshes smoothly
         if (context.uiManager) {
             context.uiManager->markDirty();
         }
 
-        std::cout << "[importmeshcommand] successfully imported " << path.filename().string() << std::endl;
+        std::cout << "[importmeshcommand] successfully imported " << path.filename().string() << ")\n";
         return true;
     }
 

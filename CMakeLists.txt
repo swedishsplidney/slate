@@ -76,6 +76,7 @@ target_include_directories(slate PRIVATE
         external/earcut
         external/stb
         external/pfd
+        external/json
 )
 
 target_link_libraries(slate PRIVATE

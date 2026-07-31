@@ -69,6 +69,12 @@ namespace slate {
         void createFontTexture(const unsigned char* pixels = nullptr, uint32_t width = 0, uint32_t height = 0);
         void createUIDescriptorSet();
 
+        std::vector<Material> m_globalMaterials;
+
+        std::vector<Material>& getGlobalMaterials() { return m_globalMaterials; }
+
+        void flushMaterialsToGPU();
+
     private:
         void createInstance();
         void createSurface();
@@ -112,6 +118,7 @@ namespace slate {
         VkDescriptorSet m_uiDescriptorSet = VK_NULL_HANDLE;
         VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
         VkPipeline m_graphicsPipeline{VK_NULL_HANDLE};
+        VkPipeline m_transparentPipeline{VK_NULL_HANDLE};
 
         std::vector<char> readFile(const std::string& filename);
         VkShaderModule createShaderModule(const std::vector<char>& code);
@@ -134,6 +141,7 @@ namespace slate {
         VkImage m_depthImage = VK_NULL_HANDLE;
         VkDeviceMemory m_depthImageMemory = VK_NULL_HANDLE;
         VkImageView m_depthImageView = VK_NULL_HANDLE;
+        VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
         
         void createDepthResources();
         void createImage(uint32_t width, uint32_t height, VkFormat format,
@@ -195,6 +203,21 @@ namespace slate {
         VkSampler m_fontSampler = VK_NULL_HANDLE;
 
         void createUIDescriptorSetLayout();
+
+        VkImage m_sceneColorImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_sceneColorMemory = VK_NULL_HANDLE;
+        VkImageView m_sceneColorImageView = VK_NULL_HANDLE;
+        VkSampler m_sceneColorSampler = VK_NULL_HANDLE;
+        std::vector<VkFramebuffer> m_sceneColorFramebuffers;
+
+        void createSceneColorResources();
+        void cleanupSceneColorResources();
+
+        VkCommandBuffer beginSingleTimeCommands();
+        void endSingleTimeCommands(VkCommandBuffer commandBuffer);
+
+        VkRenderPass m_transparentRenderPass{VK_NULL_HANDLE};
+        void createTransparentRenderPass();
     };
 
 }

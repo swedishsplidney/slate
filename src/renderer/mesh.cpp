@@ -4,8 +4,15 @@
 
 namespace slate {
 
-    Mesh::Mesh(VkDevice device, VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices, const std::vector<uint16_t>& indices)
-        : m_device(device), m_vertexCount(static_cast<uint32_t>(vertices.size())) {
+    Mesh::Mesh(VkDevice device, VkPhysicalDevice physicalDevice,
+           const std::vector<Vertex>& vertices,
+           const std::vector<uint16_t>& indices,
+           uint32_t materialId,
+           bool transparent)
+    : m_device(device),
+      m_vertexCount(static_cast<uint32_t>(vertices.size())),
+      m_materialId(materialId),
+      m_transparent(transparent) {
         createVertexBuffer(physicalDevice, vertices);
         createIndexBuffer(physicalDevice, indices);
     }

@@ -10,7 +10,9 @@ namespace slate {
     public:
         Mesh(VkDevice device, VkPhysicalDevice physicalDevice,
             const std::vector<Vertex>& vertices,
-            const std::vector<uint16_t>& indices);
+            const std::vector<uint16_t>& indices,
+            uint32_t materialId = 0,
+            bool transparent = false);
         ~Mesh();
 
         // disable copying
@@ -19,6 +21,10 @@ namespace slate {
 
         void bind(VkCommandBuffer commandBuffer);
         void draw(VkCommandBuffer commandBuffer);
+
+        uint32_t getMaterialId() const { return m_materialId; }
+
+        bool isTransparent() const { return m_transparent; }
 
     private:
         void createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices);
@@ -32,6 +38,10 @@ namespace slate {
         VkBuffer m_indexBuffer = VK_NULL_HANDLE;
         VkDeviceMemory m_indexBufferMemory = VK_NULL_HANDLE;
         uint32_t m_indexCount = 0;
+
+        uint32_t m_materialId = 0;
+
+        bool m_transparent = false;
     };
 
 }
