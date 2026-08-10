@@ -53,6 +53,9 @@ add_executable(slate
         src/core/commands/file_commands.cpp
         src/ui/ui_menu_bar.cpp
         src/ui/ui_menu_bar.hpp
+        src/core/commands/editor_commands.hpp
+        src/core/commands/editor_commands.cpp
+        src/resources/grid_generator.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})

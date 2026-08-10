@@ -5,6 +5,7 @@
 #include "ui/ui_dockspace.hpp"
 #include "ui/ui_button.hpp"
 #include "core/commands/file_commands.hpp"
+#include "core/commands/editor_commands.hpp"
 #include "ui/ui_menu_bar.hpp"
 
 #include <stdexcept>
@@ -82,7 +83,11 @@ namespace slate {
         }};
 
         MenuHeader viewMenu{"View", {
-        {"Reset Layout", "ui.reset_layout", ""}
+                {"Toggle Grid", "view.toggle_grid", ""},
+                {"Translate Gizmo", "editor.set_gizmo_translate", ""},
+                {"Rotate Gizmo", "editor.set_gizmo_rotate", ""},
+                {"", "", "", true},
+                {"Reset Layout", "ui.reset_layout", ""}
         }};
 
         menuBar->addMenu(fileMenu);
@@ -132,6 +137,18 @@ namespace slate {
         m_commandRegistry->registerCommand("file.import_mesh", [](const CommandRegistry::CommandArgs& args) {
             std::string path = args.empty() ? "" : args[0];
             return std::make_unique<ImportMeshCommand>(path);
+        });
+
+        m_commandRegistry->registerCommand("view.toggle_grid", [](const CommandRegistry::CommandArgs&) {
+            return std::make_unique<ToggleGridCommand>();
+        });
+
+        m_commandRegistry->registerCommand("editor.set_gizmo_translate", [](const CommandRegistry::CommandArgs&) {
+            return std::make_unique<SetGizmoModeCommand>(SetGizmoModeCommand::Mode::Translate);
+        });
+
+        m_commandRegistry->registerCommand("editor.set_gizmo_rotate", [](const CommandRegistry::CommandArgs&) {
+            return std::make_unique<SetGizmoModeCommand>(SetGizmoModeCommand::Mode::Rotate);
         });
 
         m_commandRegistry->registerCommand("editor.undo", [this](const CommandRegistry::CommandArgs&) {

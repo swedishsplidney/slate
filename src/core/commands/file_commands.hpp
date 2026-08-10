@@ -20,6 +20,7 @@ namespace slate {
         std::string m_name{"Import Mesh"};
         std::string m_filePath;
         uint32_t m_importedMeshId{0};
+        size_t m_materialsAddedCount{0};
     };
 
 }

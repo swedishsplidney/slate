@@ -37,7 +37,7 @@ namespace slate {
         std::vector<uint16_t> loadedIndices;
 
         bool success = false;
-        
+
         if (context.renderer) {
             auto& globalMaterials = context.renderer->getGlobalMaterials();
 
@@ -54,6 +54,8 @@ namespace slate {
                 std::cerr << "[importmeshcommand] mesh loading failed or produced empty geometry.\n";
                 return false;
             }
+
+            m_materialsAddedCount = globalMaterials.size() - materialsBeforeLoad;
 
             uint32_t primaryMaterialId = 0;
             bool isTransparent = false;
@@ -86,17 +88,24 @@ namespace slate {
             context.uiManager->markDirty();
         }
 
-        std::cout << "[importmeshcommand] successfully imported " << path.filename().string() << ")\n";
+        std::cout << "[importmeshcommand] successfully imported " << path.filename().string() << "\n";
         return true;
     }
 
     bool ImportMeshCommand::undo(const CommandContext& context) {
         if (context.renderer && m_importedMeshId != 0) {
+            context.renderer->removeLastMeshFromScene();
+
+            if (m_materialsAddedCount > 0) {
+                context.renderer->popGlobalMaterials(m_materialsAddedCount);
+                context.renderer->flushMaterialsToGPU();
+            }
+
             if (context.uiManager) {
                 context.uiManager->markDirty();
             }
 
-            std::cout << "[ImportMeshCommand] Undid import of mesh ID: " << m_importedMeshId << std::endl;
+            std::cout << "[importmeshcommand] undid import of mesh ID: " << m_importedMeshId << std::endl;
             return true;
         }
         return false;

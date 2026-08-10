@@ -75,6 +75,28 @@ namespace slate {
 
         void flushMaterialsToGPU();
 
+        void removeLastMeshFromScene() {
+            if (!m_sceneMeshes.empty()) {
+                m_sceneMeshes.pop_back();
+            }
+        }
+
+        void popGlobalMaterials(size_t count) {
+            if (count <= m_globalMaterials.size()) {
+                m_globalMaterials.erase(m_globalMaterials.end() - count, m_globalMaterials.end());
+            }
+        }
+
+        bool isGridEnabled() const { return m_showGrid; }
+        void toggleGrid() { m_showGrid = !m_showGrid; }
+
+        enum class GizmoMode { Translate, Rotate, Scale };
+        void setGizmoMode(GizmoMode mode) { m_gizmoMode = mode; }
+        GizmoMode getGizmoMode() const { return m_gizmoMode; }
+
+        std::unique_ptr<Mesh> m_gridMesh;
+        std::unique_ptr<Mesh> m_axesMesh;
+
     private:
         void createInstance();
         void createSurface();
@@ -218,6 +240,13 @@ namespace slate {
 
         VkRenderPass m_transparentRenderPass{VK_NULL_HANDLE};
         void createTransparentRenderPass();
+
+        bool m_showGrid{true};
+        GizmoMode m_gizmoMode{GizmoMode::Translate};
+
+        void createGridMesh();
+        VkPipeline m_gridPipeline{VK_NULL_HANDLE};
+        void createGridPipeline();
     };
 
 }
