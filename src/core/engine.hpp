@@ -46,6 +46,18 @@ namespace slate {
         std::unique_ptr<UIManager> m_uiManager{nullptr};
         std::unique_ptr<CommandRegistry> m_commandRegistry{nullptr};
         CommandContext m_commandContext{};
+
+        size_t m_selectedMeshIndex = 0;
+
+        bool m_isDraggingGizmo = {false};
+        int m_activeGizmoAxis = {-1};
+        glm::vec2 m_gizmoDragStartPos{0.0f};
+        int checkGizmoHit(const glm::vec2& mousePos);
+        glm::vec2 worldToScreen(const glm::vec3& worldPos);
+
+        glm::vec3 m_gizmoPlaneOrigin;
+        glm::vec3 m_gizmoPlaneNormal;
+        glm::vec3 m_lastRayIntersection;
     };
 
 }

@@ -16,6 +16,7 @@
 #include "ui/ui_element.hpp"
 #include "resources/mesh_loader.hpp"
 #include "resources/grid_generator.hpp"
+#include "resources/gizmo_generator.hpp"
 
 namespace slate {
 
@@ -47,10 +48,12 @@ namespace slate {
         createDescriptorPoolAndSets();
         createGraphicsPipeline();
         createGridPipeline();
+        createGizmoPipeline();
         createUIGraphicsPipeline();
         createFontTexture();
         createUIDescriptorSet();
         createGridMesh();
+        createGizmoMesh();
     }
 
     void VulkanRenderer::pickPhysicalDevice() {
@@ -811,6 +814,50 @@ namespace slate {
             }
         }
 
+        if (m_gizmoMesh && m_gizmoPipeline != VK_NULL_HANDLE && m_gizmoMode == GizmoMode::Translate) {
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gizmoPipeline);
+            m_gizmoMesh->bind(commandBuffer);
+
+            glm::vec3 gizmoPos(0.0f);
+            if (!m_sceneMeshes.empty() && m_sceneMeshes[m_selectedMeshIndex]) {
+                gizmoPos = m_sceneMeshes[m_selectedMeshIndex]->getGeometricCenter();
+            }
+
+            float dist = glm::distance(cameraPos, gizmoPos);
+
+            float minScale = 0.05f;
+            float maxScale = 1.0f;
+
+            float smoothingFactor = 8.0f;
+            float t = dist / (dist + smoothingFactor);
+            float gizmoScale = glm::mix(minScale, maxScale, t);
+
+            glm::mat4 rotationFix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+            glm::mat4 gizmoModelMatrix = glm::translate(glm::mat4(1.0f), gizmoPos) *
+                                         rotationFix *
+                                         glm::scale(glm::mat4(1.0f), glm::vec3(gizmoScale));
+
+            struct GizmoPushConstants {
+                glm::mat4 modelMatrix;
+                glm::mat4 viewProjMatrix;
+            } gizmoPushData{
+                gizmoModelMatrix,
+                proj * viewMatrix
+            };
+
+            vkCmdPushConstants(
+                commandBuffer,
+                m_pipelineLayout,
+                VK_SHADER_STAGE_VERTEX_BIT,
+                0,
+                sizeof(GizmoPushConstants),
+                &gizmoPushData
+            );
+
+            m_gizmoMesh->draw(commandBuffer);
+        }
+
         vkCmdEndRenderPass(commandBuffer);
 
         // copy
@@ -1565,6 +1612,126 @@ namespace slate {
         vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
     }
 
+    void VulkanRenderer::createGizmoMesh() {
+        std::vector<Vertex> vertices;
+        std::vector<uint16_t> indices;
+
+        GizmoGenerator::generateTranslateGizmo(vertices, indices);
+
+        m_gizmoMesh = std::make_unique<Mesh>(m_device, m_physicalDevice, vertices, indices);
+    }
+
+    void VulkanRenderer::createGizmoPipeline() {
+        auto vertShaderCode = readFile("shaders/compiled/gizmo.vert.spv");
+        auto fragShaderCode = readFile("shaders/compiled/gizmo.frag.spv");
+
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+        auto bindingDescription = Vertex::getBindingDescription();
+        auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_FALSE;
+        depthStencil.depthWriteEnable = VK_FALSE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+
+        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_TRUE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+        VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+        dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicStateInfo.pDynamicStates = dynamicStates.data();
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicStateInfo;
+        pipelineInfo.layout = m_pipelineLayout;
+        pipelineInfo.renderPass = m_renderPass;
+        pipelineInfo.subpass = 0;
+
+        if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_gizmoPipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create gizmo graphics pipeline!");
+        }
+
+        vkDestroyShaderModule(m_device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
+    }
+
     void VulkanRenderer::createSceneColorResources() {
         createImage(
             m_swapchainExtent.width,
@@ -2076,6 +2243,12 @@ namespace slate {
     }
 
     void VulkanRenderer::cleanup() {
+        if (m_gizmoPipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(m_device, m_gizmoPipeline, nullptr);
+            m_gizmoPipeline = VK_NULL_HANDLE;
+        }
+        m_gizmoMesh.reset();
+
         m_sceneMeshes.clear();
         m_gridMesh.reset();
         m_axesMesh.reset();

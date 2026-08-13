@@ -47,6 +47,15 @@ namespace slate {
     }
 
     void Mesh::createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices) {
+
+        glm::vec3 minBounds(1e30f);
+        glm::vec3 maxBounds(-1e30f);
+        for (const auto& v : vertices) {
+            minBounds = glm::min(minBounds, v.pos);
+            maxBounds = glm::max(maxBounds, v.pos);
+        }
+        m_geometricCenter = (minBounds + maxBounds) * 0.5f;
+
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
         VkBufferCreateInfo bufferInfo{};

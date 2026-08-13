@@ -3,6 +3,8 @@
 #include "vertex.hpp"
 #include <vector>
 #include <vulkan/vulkan.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace slate {
 
@@ -26,6 +28,15 @@ namespace slate {
 
         bool isTransparent() const { return m_transparent; }
 
+        void setModelMatrix(const glm::mat4& matrix) { m_modelMatrix = matrix; }
+        const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
+
+        void translate(const glm::vec3& delta) {
+            m_modelMatrix = glm::translate(m_modelMatrix, delta);
+        }
+
+        glm::vec3 getGeometricCenter() const { return m_modelMatrix * glm::vec4(m_geometricCenter, 1.0f); }
+
     private:
         void createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices);
         void createIndexBuffer(VkPhysicalDevice physicalDevice, const std::vector<uint16_t>& indices);
@@ -42,6 +53,9 @@ namespace slate {
         uint32_t m_materialId = 0;
 
         bool m_transparent = false;
+
+        glm::mat4 m_modelMatrix{1.0f};
+        glm::vec3 m_geometricCenter{0.0f};
     };
 
 }

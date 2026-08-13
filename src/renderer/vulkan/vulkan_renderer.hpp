@@ -97,6 +97,9 @@ namespace slate {
         std::unique_ptr<Mesh> m_gridMesh;
         std::unique_ptr<Mesh> m_axesMesh;
 
+        const std::vector<std::unique_ptr<Mesh>>& getSceneMeshes() const { return m_sceneMeshes; }
+        std::vector<std::unique_ptr<Mesh>>& getSceneMeshes() { return m_sceneMeshes; }
+
     private:
         void createInstance();
         void createSurface();
@@ -247,6 +250,14 @@ namespace slate {
         void createGridMesh();
         VkPipeline m_gridPipeline{VK_NULL_HANDLE};
         void createGridPipeline();
+
+        std::unique_ptr<Mesh> m_gizmoMesh;
+        VkPipeline m_gizmoPipeline{VK_NULL_HANDLE};
+
+        void createGizmoMesh();
+        void createGizmoPipeline();
+
+        size_t m_selectedMeshIndex = 0;
     };
 
 }
