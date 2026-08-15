@@ -479,6 +479,9 @@ namespace slate {
                     int w = event.window.data1;
                     int h = event.window.data2;
 
+                    m_width = w;
+                    m_height = h;
+
                     m_renderer->onWindowResize(w, h);
 
                     if (m_uiManager) {

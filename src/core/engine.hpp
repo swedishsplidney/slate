@@ -37,8 +37,8 @@ namespace slate {
         bool isPointInElement(glm::vec2 point, const std::shared_ptr<UIElement>& element);
 
         SDL_Window* m_window{nullptr};
-        const int m_width{1280};
-        const int m_height{720};
+        int m_width{1280};
+        int m_height{720};
 
         std::unique_ptr<Renderer> m_renderer{nullptr};
 
