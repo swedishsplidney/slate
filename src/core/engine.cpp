@@ -265,21 +265,56 @@ namespace slate {
 
         glm::vec3 gizmoCenter = sceneMeshes[m_selectedMeshIndex]->getGeometricCenter();
 
-        auto getScreenPos = [&](const glm::vec3& localOffset) {
-            return worldToScreen(gizmoCenter + localOffset);
+        float viewportWidth = m_viewportPanel->getSize().x;
+        float viewportHeight = m_viewportPanel->getSize().y;
+        float aspect = viewportWidth / viewportHeight;
+
+        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
+        proj[1][1] *= -1.0f;
+        glm::mat4 view = m_camera.getViewMatrix();
+
+        auto getValidScreenPos = [&](const glm::vec3& worldPos, glm::vec2& outScreen) {
+            glm::vec4 clipPos = proj * view * glm::vec4(worldPos, 1.0f);
+            if (clipPos.w <= 0.001f) return false;
+
+            glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+            float x = (ndc.x * 0.5f + 0.5f) * viewportWidth + m_viewportPanel->getAbsolutePosition().x;
+            float y = (ndc.y * 0.5f + 0.5f) * viewportHeight + m_viewportPanel->getAbsolutePosition().y;
+            outScreen = glm::vec2(x, y);
+            return true;
         };
 
-        glm::vec2 screenOrigin = getScreenPos(glm::vec3(0.0f));
-        glm::vec2 screenPosX   = getScreenPos(glm::vec3(1.0f, 0.0f, 0.0f));
-        glm::vec2 screenPosY   = getScreenPos(glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::vec2 screenPosZ   = getScreenPos(glm::vec3(0.0f, 0.0f, 1.0f));
+        glm::vec2 screenOrigin;
+        if (!getValidScreenPos(gizmoCenter, screenOrigin)) {
+            return -1;
+        }
 
-        float distX = distToSegment(mousePos, screenOrigin, screenPosX);
-        float distY = distToSegment(mousePos, screenOrigin, screenPosY);
-        float distZ = distToSegment(mousePos, screenOrigin, screenPosZ);
+        float distX = 99999.0f;
+        float distY = 99999.0f;
+        float distZ = 99999.0f;
 
-        float threshold = 18.0f;
+        glm::vec2 screenPosX, screenPosY, screenPosZ;
+        const float minScreenLengthForHit = 5.0f;
 
+        if (getValidScreenPos(gizmoCenter + glm::vec3(1.0f, 0.0f, 0.0f), screenPosX)) {
+            if (glm::length(screenPosX - screenOrigin) >= minScreenLengthForHit) {
+                distX = distToSegment(mousePos, screenOrigin, screenPosX);
+            }
+        }
+
+        if (getValidScreenPos(gizmoCenter + glm::vec3(0.0f, 1.0f, 0.0f), screenPosY)) {
+            if (glm::length(screenPosY - screenOrigin) >= minScreenLengthForHit) {
+                distY = distToSegment(mousePos, screenOrigin, screenPosY);
+            }
+        }
+
+        if (getValidScreenPos(gizmoCenter + glm::vec3(0.0f, 0.0f, -1.0f), screenPosZ)) {
+            if (glm::length(screenPosZ - screenOrigin) >= minScreenLengthForHit) {
+                distZ = distToSegment(mousePos, screenOrigin, screenPosZ);
+            }
+        }
+
+        float threshold = 12.0f;
         float minDist = std::min({distX, distY, distZ});
 
         if (minDist <= threshold) {
@@ -370,9 +405,17 @@ namespace slate {
 
                                 glm::mat4 invView = glm::inverse(m_camera.getViewMatrix());
                                 glm::vec3 camDir = -glm::vec3(invView[2]);
-                                glm::vec3 N = glm::cross(worldAxis, glm::cross(camDir, worldAxis));
-                                if (glm::length(N) < 0.0001f) {
-                                    N = glm::cross(worldAxis, glm::vec3(0.0f, 1.0f, 0.0f));
+                                glm::vec3 camRight = glm::vec3(invView[0]);
+
+                                glm::vec3 crossCheck = glm::cross(camDir, worldAxis);
+                                glm::vec3 N;
+                                if (glm::length(crossCheck) < 0.001f) {
+                                    N = glm::cross(worldAxis, camRight);
+                                    if (glm::length(N) < 0.001f) {
+                                        N = camRight;
+                                    }
+                                } else {
+                                    N = glm::cross(worldAxis, crossCheck);
                                 }
                                 m_gizmoPlaneNormal = glm::normalize(N);
 
