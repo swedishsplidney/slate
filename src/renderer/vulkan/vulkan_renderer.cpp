@@ -733,20 +733,18 @@ namespace slate {
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
         VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(m_swapchainExtent.width);
-        viewport.height = static_cast<float>(m_swapchainExtent.height);
+        viewport.x = viewportOffset.x;
+        viewport.y = viewportOffset.y;
+        viewport.width = viewportSize.x;
+        viewport.height = viewportSize.y;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
         VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = m_swapchainExtent;
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        scissor.offset = {static_cast<int32_t>(viewportOffset.x), static_cast<int32_t>(viewportOffset.y)};
+        scissor.extent = {static_cast<uint32_t>(viewportSize.x), static_cast<uint32_t>(viewportSize.y)};
 
-        float aspect = static_cast<float>(m_swapchainExtent.width) / static_cast<float>(m_swapchainExtent.height);
+        float aspect = viewportSize.x / viewportSize.y;
         glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
         proj[1][1] *= -1.0f;
 
@@ -758,18 +756,22 @@ namespace slate {
             m_materialDescriptorSets[m_currentFrame]
         };
 
+        // opaque
+
         std::array<VkClearValue, 2> clearValues{};
         clearValues[0].color = {{0.025f, 0.025f, 0.025f, 1.0f}};
         clearValues[1].depthStencil = {1.0f, 0};
 
-        VkRenderPassBeginInfo renderPassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        renderPassInfo.renderPass = m_renderPass;
-        renderPassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
-        renderPassInfo.renderArea = scissor;
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+        VkRenderPassBeginInfo opaquePassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        opaquePassInfo.renderPass = m_renderPass;
+        opaquePassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
+        opaquePassInfo.renderArea = scissor;
+        opaquePassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        opaquePassInfo.pClearValues = clearValues.data();
 
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBeginRenderPass(commandBuffer, &opaquePassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0,
@@ -833,8 +835,86 @@ namespace slate {
             m_gizmoMesh->draw(commandBuffer);
         }
 
-        // transparent
+        vkCmdEndRenderPass(commandBuffer);
+
+        // copy
+
+        VkImage swapchainImage = m_swapchainImages[imageIndex];
+
+        VkImageMemoryBarrier barrierToTransfer[2]{};
+        barrierToTransfer[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrierToTransfer[0].oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        barrierToTransfer[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrierToTransfer[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierToTransfer[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierToTransfer[0].image = swapchainImage;
+        barrierToTransfer[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        barrierToTransfer[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrierToTransfer[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+        barrierToTransfer[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrierToTransfer[1].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrierToTransfer[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrierToTransfer[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierToTransfer[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierToTransfer[1].image = m_sceneColorImage;
+        barrierToTransfer[1].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        barrierToTransfer[1].srcAccessMask = 0;
+        barrierToTransfer[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 2, barrierToTransfer);
+
+        VkImageCopy copyRegion{};
+        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copyRegion.srcOffset = {static_cast<int32_t>(viewportOffset.x), static_cast<int32_t>(viewportOffset.y), 0};
+        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        copyRegion.dstOffset = {static_cast<int32_t>(viewportOffset.x), static_cast<int32_t>(viewportOffset.y), 0};
+        copyRegion.extent = {static_cast<uint32_t>(viewportSize.x), static_cast<uint32_t>(viewportSize.y), 1};
+
+        vkCmdCopyImage(commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       m_sceneColorImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+        VkImageMemoryBarrier barrierToNormal[2]{};
+        barrierToNormal[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrierToNormal[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrierToNormal[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        barrierToNormal[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierToNormal[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierToNormal[0].image = swapchainImage;
+        barrierToNormal[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        barrierToNormal[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrierToNormal[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        barrierToNormal[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrierToNormal[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrierToNormal[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrierToNormal[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierToNormal[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierToNormal[1].image = m_sceneColorImage;
+        barrierToNormal[1].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        barrierToNormal[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrierToNormal[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                             0, 0, nullptr, 0, nullptr, 2, barrierToNormal);
+
+        // transparent and ui
+
+        VkRenderPassBeginInfo transparentPassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        transparentPassInfo.renderPass = m_transparentRenderPass;
+        transparentPassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
+        transparentPassInfo.renderArea = scissor;
+        transparentPassInfo.clearValueCount = 0;
+
+        vkCmdBeginRenderPass(commandBuffer, &transparentPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_transparentPipeline);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0,
+                                static_cast<uint32_t>(descriptorSetsToBind.size()), descriptorSetsToBind.data(), 0, nullptr);
+
         for (const auto& mesh : m_sceneMeshes) {
             if (!mesh || !mesh->isTransparent()) continue;
             mesh->bind(commandBuffer);
@@ -849,7 +929,6 @@ namespace slate {
             mesh->draw(commandBuffer);
         }
 
-        // ui
         if (m_uiVertexBuffer != VK_NULL_HANDLE && !m_uiIndicesMemory.empty()) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiGraphicsPipeline);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiPipelineLayout, 0, 1, &m_uiDescriptorSet, 0, nullptr);

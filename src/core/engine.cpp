@@ -372,10 +372,16 @@ namespace slate {
 
                 // capture mouse position and viewport bounds on press
                 if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                    float mx, my;
-                    SDL_GetMouseState(&mx, &my);
+                    float mx = static_cast<float>(event.button.x);
+                    float my = static_cast<float>(event.button.y);
                     mousePos = glm::vec2(mx, my);
                     clickInsideViewport = isPointInElement(mousePos, m_viewportPanel);
+
+                    if (clickInsideViewport && (event.button.button == SDL_BUTTON_LEFT || event.button.button == SDL_BUTTON_RIGHT)) {
+                        m_viewportFocused = true;
+                    } else {
+                        m_viewportFocused = false;
+                    }
 
                     if (event.button.button == SDL_BUTTON_RIGHT && clickInsideViewport) {
                         m_rightClickDragging = true;
@@ -383,7 +389,6 @@ namespace slate {
                         SDL_SetWindowRelativeMouseMode(m_window, true);
                     } else if (event.button.button == SDL_BUTTON_LEFT && clickInsideViewport) {
                         int hitAxis = checkGizmoHit(mousePos);
-                        std::cout << "left click at (" << mousePos.x << ", " << mousePos.y << ") -> hit axis: " << hitAxis << "\n";
 
                         if (hitAxis != -1) {
                             auto& sceneMeshes = static_cast<VulkanRenderer*>(m_renderer.get())->getSceneMeshes();
@@ -511,8 +516,8 @@ namespace slate {
                 static_cast<VulkanRenderer*>(m_renderer.get())->updateUIGeometryBuffers(vertices, indices);
             }
 
-            glm::vec2 vpOffset = m_viewportPanel ? m_viewportPanel->getAbsolutePosition() : glm::vec2(0.0f);
-            glm::vec2 vpSize = m_viewportPanel ? m_viewportPanel->getSize() : glm::vec2(static_cast<float>(m_width), static_cast<float>(m_height));
+            glm::vec2 vpOffset(0.0f, 0.0f);
+            glm::vec2 vpSize(static_cast<float>(m_width), static_cast<float>(m_height));
 
             m_renderer->drawFrame(m_camera.getViewMatrix(), vpOffset, vpSize);
         }
