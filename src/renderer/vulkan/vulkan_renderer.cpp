@@ -728,12 +728,23 @@ namespace slate {
         vkBindBufferMemory(m_device, buffer, bufferMemory, 0);
     }
 
-    void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const glm::mat4& viewMatrix) {
+    void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const glm::mat4& viewMatrix, glm::vec2 viewportOffset, glm::vec2 viewportSize) {
         VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-        VkViewport viewport{0.0f, 0.0f, static_cast<float>(m_swapchainExtent.width), static_cast<float>(m_swapchainExtent.height), 0.0f, 1.0f};
-        VkRect2D scissor{{0, 0}, m_swapchainExtent};
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(m_swapchainExtent.width);
+        viewport.height = static_cast<float>(m_swapchainExtent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = m_swapchainExtent;
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
         float aspect = static_cast<float>(m_swapchainExtent.width) / static_cast<float>(m_swapchainExtent.height);
         glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
@@ -747,22 +758,18 @@ namespace slate {
             m_materialDescriptorSets[m_currentFrame]
         };
 
-        // opaque pass
-
         std::array<VkClearValue, 2> clearValues{};
         clearValues[0].color = {{0.025f, 0.025f, 0.025f, 1.0f}};
         clearValues[1].depthStencil = {1.0f, 0};
 
-        VkRenderPassBeginInfo opaquePassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        opaquePassInfo.renderPass = m_renderPass;
-        opaquePassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
-        opaquePassInfo.renderArea = {{0, 0}, m_swapchainExtent};
-        opaquePassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        opaquePassInfo.pClearValues = clearValues.data();
+        VkRenderPassBeginInfo renderPassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        renderPassInfo.renderPass = m_renderPass;
+        renderPassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
+        renderPassInfo.renderArea = scissor;
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
 
-        vkCmdBeginRenderPass(commandBuffer, &opaquePassInfo, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0,
@@ -776,42 +783,28 @@ namespace slate {
                 glm::mat4 modelMatrix;
                 glm::mat4 viewProjMatrix;
                 uint32_t materialId = 0;
-            } pushData{glm::mat4(1.0f), proj * viewMatrix, mesh->getMaterialId()};
+            } pushData{mesh->getModelMatrix(), proj * viewMatrix, mesh->getMaterialId()};
 
             vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushData);
             mesh->draw(commandBuffer);
         }
 
-        if (m_showGrid) {
+        if (m_showGrid && m_gridMesh) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gridPipeline);
+            m_gridMesh->bind(commandBuffer);
 
-            if (m_gridMesh) {
-                m_gridMesh->bind(commandBuffer);
+            float gridStep = 1.0f;
+            float snappedX = std::floor(cameraPos.x / gridStep) * gridStep;
+            float snappedZ = std::floor(cameraPos.z / gridStep) * gridStep;
+            glm::mat4 gridModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(snappedX, 0.0f, snappedZ));
 
-                float gridStep = 1.0f;
-                float snappedX = std::floor(cameraPos.x / gridStep) * gridStep;
-                float snappedZ = std::floor(cameraPos.z / gridStep) * gridStep;
-                glm::mat4 gridModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(snappedX, 0.0f, snappedZ));
+            struct PushConstants {
+                glm::mat4 modelMatrix;
+                glm::mat4 viewProjMatrix;
+            } gridPushData{gridModelMatrix, proj * viewMatrix};
 
-                struct PushConstants {
-                    glm::mat4 modelMatrix;
-                    glm::mat4 viewProjMatrix;
-                } gridPushData{
-                    gridModelMatrix,
-                    proj * viewMatrix
-                };
-
-                vkCmdPushConstants(
-                    commandBuffer,
-                    m_pipelineLayout,
-                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                    0,
-                    sizeof(PushConstants),
-                    &gridPushData
-                );
-
-                m_gridMesh->draw(commandBuffer);
-            }
+            vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &gridPushData);
+            m_gridMesh->draw(commandBuffer);
         }
 
         if (m_gizmoMesh && m_gizmoPipeline != VK_NULL_HANDLE && m_gizmoMode == GizmoMode::Translate) {
@@ -820,121 +813,28 @@ namespace slate {
 
             glm::vec3 gizmoPos(0.0f);
             if (!m_sceneMeshes.empty() && m_sceneMeshes[m_selectedMeshIndex]) {
-                gizmoPos = m_sceneMeshes[m_selectedMeshIndex]->getGeometricCenter();
+                auto& mesh = m_sceneMeshes[m_selectedMeshIndex];
+                glm::vec4 worldCenter = mesh->getModelMatrix() * glm::vec4(mesh->getGeometricCenter(), 1.0f);
+                gizmoPos = glm::vec3(worldCenter);
             }
-
             float dist = glm::distance(cameraPos, gizmoPos);
-
-            float minScale = 0.05f;
-            float maxScale = 1.0f;
-
-            float smoothingFactor = 8.0f;
-            float t = dist / (dist + smoothingFactor);
-            float gizmoScale = glm::mix(minScale, maxScale, t);
-
-            glm::mat4 rotationFix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            float t = dist / (dist + 8.0f);
+            float gizmoScale = glm::mix(0.05f, 1.0f, t);
 
             glm::mat4 gizmoModelMatrix = glm::translate(glm::mat4(1.0f), gizmoPos) *
-                                         rotationFix *
-                                         glm::scale(glm::mat4(1.0f), glm::vec3(gizmoScale));
+                                       glm::scale(glm::mat4(1.0f), glm::vec3(gizmoScale));
 
             struct GizmoPushConstants {
                 glm::mat4 modelMatrix;
                 glm::mat4 viewProjMatrix;
-            } gizmoPushData{
-                gizmoModelMatrix,
-                proj * viewMatrix
-            };
+            } gizmoPushData{gizmoModelMatrix, proj * viewMatrix};
 
-            vkCmdPushConstants(
-                commandBuffer,
-                m_pipelineLayout,
-                VK_SHADER_STAGE_VERTEX_BIT,
-                0,
-                sizeof(GizmoPushConstants),
-                &gizmoPushData
-            );
-
+            vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GizmoPushConstants), &gizmoPushData);
             m_gizmoMesh->draw(commandBuffer);
         }
 
-        vkCmdEndRenderPass(commandBuffer);
-
-        // copy
-
-        VkImage swapchainImage = m_swapchainImages[imageIndex];
-
-        VkImageMemoryBarrier barrierToTransfer[2]{};
-        barrierToTransfer[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrierToTransfer[0].oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        barrierToTransfer[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrierToTransfer[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToTransfer[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToTransfer[0].image = swapchainImage;
-        barrierToTransfer[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        barrierToTransfer[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        barrierToTransfer[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-
-        barrierToTransfer[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrierToTransfer[1].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        barrierToTransfer[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrierToTransfer[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToTransfer[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToTransfer[1].image = m_sceneColorImage;
-        barrierToTransfer[1].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        barrierToTransfer[1].srcAccessMask = 0;
-        barrierToTransfer[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             0, 0, nullptr, 0, nullptr, 2, barrierToTransfer);
-
-        VkImageCopy copyRegion{};
-        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.extent = {m_swapchainExtent.width, m_swapchainExtent.height, 1};
-
-        vkCmdCopyImage(commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       m_sceneColorImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-        VkImageMemoryBarrier barrierToNormal[2]{};
-        barrierToNormal[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrierToNormal[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrierToNormal[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        barrierToNormal[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToNormal[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToNormal[0].image = swapchainImage;
-        barrierToNormal[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        barrierToNormal[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        barrierToNormal[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-        barrierToNormal[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrierToNormal[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrierToNormal[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrierToNormal[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToNormal[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierToNormal[1].image = m_sceneColorImage;
-        barrierToNormal[1].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        barrierToNormal[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrierToNormal[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                             0, 0, nullptr, 0, nullptr, 2, barrierToNormal);
-
-        // transparent and ui pass
-        VkRenderPassBeginInfo transparentPassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        transparentPassInfo.renderPass = m_transparentRenderPass;
-        transparentPassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
-        transparentPassInfo.renderArea = {{0, 0}, m_swapchainExtent};
-        transparentPassInfo.clearValueCount = 0;
-
-        vkCmdBeginRenderPass(commandBuffer, &transparentPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
+        // transparent
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_transparentPipeline);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0,
-                                static_cast<uint32_t>(descriptorSetsToBind.size()), descriptorSetsToBind.data(), 0, nullptr);
-
         for (const auto& mesh : m_sceneMeshes) {
             if (!mesh || !mesh->isTransparent()) continue;
             mesh->bind(commandBuffer);
@@ -943,12 +843,13 @@ namespace slate {
                 glm::mat4 modelMatrix;
                 glm::mat4 viewProjMatrix;
                 uint32_t materialId = 0;
-            } pushData{glm::mat4(1.0f), proj * viewMatrix, mesh->getMaterialId()};
+            } pushData{mesh->getModelMatrix(), proj * viewMatrix, mesh->getMaterialId()};
 
             vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushData);
             mesh->draw(commandBuffer);
         }
 
+        // ui
         if (m_uiVertexBuffer != VK_NULL_HANDLE && !m_uiIndicesMemory.empty()) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiGraphicsPipeline);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiPipelineLayout, 0, 1, &m_uiDescriptorSet, 0, nullptr);
@@ -1020,7 +921,7 @@ namespace slate {
         }
     }
 
-    void VulkanRenderer::drawFrame(const glm::mat4& viewMatrix) {
+    void VulkanRenderer::drawFrame(const glm::mat4& viewMatrix, glm::vec2 viewportOffset, glm::vec2 viewportSize) {
         // wait for gpu
         vkWaitForFences(m_device, 1, &m_inFlightFence, VK_TRUE, UINT64_MAX);
 
@@ -1040,7 +941,7 @@ namespace slate {
 
         // reset and record
         vkResetCommandBuffer(m_commandBuffer, 0);
-        recordCommandBuffer(m_commandBuffer, imageIndex, viewMatrix);
+        recordCommandBuffer(m_commandBuffer, imageIndex, viewMatrix, viewportOffset, viewportSize);
 
         // send to gpu
         VkSubmitInfo submitInfo{};
@@ -1679,7 +1580,7 @@ namespace slate {
 
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthTestEnable = VK_FALSE;
+        depthStencil.depthTestEnable = VK_TRUE;
         depthStencil.depthWriteEnable = VK_FALSE;
         depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
 

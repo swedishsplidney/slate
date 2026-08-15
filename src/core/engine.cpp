@@ -16,26 +16,20 @@
 
 namespace slate {
 
-    struct Ray {
-        glm::vec3 origin;
-        glm::vec3 direction;
-    };
+    Ray Engine::screenPointToRay(glm::vec2 mousePos) {
+        glm::vec2 vpOffset(0.0f);
+        glm::vec2 vpSize(static_cast<float>(m_width), static_cast<float>(m_height));
 
-    Ray screenPointToRay(SDL_Window* window, std::shared_ptr<UIElement> viewportPanel, const Camera& camera, glm::vec2 mousePos) {
-        float viewportWidth = viewportPanel->getSize().x;
-        float viewportHeight = viewportPanel->getSize().y;
+        float localX = mousePos.x - vpOffset.x;
+        float localY = mousePos.y - vpOffset.y;
 
-        glm::vec2 panelAbsPos = viewportPanel->getAbsolutePosition();
-        float viewportX = mousePos.x - panelAbsPos.x;
-        float viewportY = mousePos.y - panelAbsPos.y;
+        float ndcX = (2.0f * localX) / vpSize.x - 1.0f;
+        float ndcY = (2.0f * localY) / vpSize.y - 1.0f;
 
-        float ndcX = (2.0f * viewportX) / viewportWidth - 1.0f;
-        float ndcY = (2.0f * viewportY) / viewportHeight - 1.0f;
-
-        float aspect = viewportWidth / viewportHeight;
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
+        float aspect = vpSize.x / (vpSize.y > 0.0f ? vpSize.y : 1.0f);
+        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 1000.0f);
         proj[1][1] *= -1.0f;
-        glm::mat4 viewMatrix = camera.getViewMatrix();
+        glm::mat4 viewMatrix = m_camera.getViewMatrix();
 
         glm::mat4 invProj = glm::inverse(proj);
         glm::mat4 invView = glm::inverse(viewMatrix);
@@ -240,11 +234,11 @@ namespace slate {
     }
 
     glm::vec2 Engine::worldToScreen(const glm::vec3& worldPos) {
-        float viewportWidth = m_viewportPanel->getSize().x;
-        float viewportHeight = m_viewportPanel->getSize().y;
-        float aspect = viewportWidth / viewportHeight;
+        glm::vec2 vpOffset(0.0f);
+        glm::vec2 vpSize(static_cast<float>(m_width), static_cast<float>(m_height));
+        float aspect = vpSize.x / (vpSize.y > 0.0f ? vpSize.y : 1.0f);
 
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
+        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 1000.0f);
         proj[1][1] *= -1.0f;
         glm::mat4 view = m_camera.getViewMatrix();
 
@@ -253,8 +247,8 @@ namespace slate {
 
         glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
 
-        float x = (ndc.x * 0.5f + 0.5f) * viewportWidth + m_viewportPanel->getAbsolutePosition().x;
-        float y = (ndc.y * 0.5f + 0.5f) * viewportHeight + m_viewportPanel->getAbsolutePosition().y;
+        float x = vpOffset.x + (ndc.x * 0.5f + 0.5f) * vpSize.x;
+        float y = vpOffset.y + (ndc.y * 0.5f + 0.5f) * vpSize.y;
         return glm::vec2(x, y);
     }
 
@@ -264,13 +258,18 @@ namespace slate {
             return -1;
         }
 
-        glm::vec3 gizmoCenter = sceneMeshes[m_selectedMeshIndex]->getGeometricCenter();
+        auto& mesh = sceneMeshes[m_selectedMeshIndex];
+        glm::vec3 gizmoCenter = glm::vec3(mesh->getModelMatrix() * glm::vec4(mesh->getGeometricCenter(), 1.0f));
 
-        float viewportWidth = m_viewportPanel->getSize().x;
-        float viewportHeight = m_viewportPanel->getSize().y;
-        float aspect = viewportWidth / viewportHeight;
+        float dist = glm::distance(m_camera.getPosition(), gizmoCenter);
+        float t = dist / (dist + 8.0f);
+        float gizmoScale = glm::mix(0.05f, 1.0f, t);
 
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
+        glm::vec2 vpOffset(0.0f);
+        glm::vec2 vpSize(static_cast<float>(m_width), static_cast<float>(m_height));
+        float aspect = vpSize.x / (vpSize.y > 0.0f ? vpSize.y : 1.0f);
+
+        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 1000.0f);
         proj[1][1] *= -1.0f;
         glm::mat4 view = m_camera.getViewMatrix();
 
@@ -279,8 +278,8 @@ namespace slate {
             if (clipPos.w <= 0.001f) return false;
 
             glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
-            float x = (ndc.x * 0.5f + 0.5f) * viewportWidth + m_viewportPanel->getAbsolutePosition().x;
-            float y = (ndc.y * 0.5f + 0.5f) * viewportHeight + m_viewportPanel->getAbsolutePosition().y;
+            float x = vpOffset.x + (ndc.x * 0.5f + 0.5f) * vpSize.x;
+            float y = vpOffset.y + (ndc.y * 0.5f + 0.5f) * vpSize.y;
             outScreen = glm::vec2(x, y);
             return true;
         };
@@ -290,26 +289,23 @@ namespace slate {
             return -1;
         }
 
-        float distX = 99999.0f;
-        float distY = 99999.0f;
-        float distZ = 99999.0f;
-
+        float distX = 99999.0f, distY = 99999.0f, distZ = 99999.0f;
         glm::vec2 screenPosX, screenPosY, screenPosZ;
         const float minScreenLengthForHit = 5.0f;
 
-        if (getValidScreenPos(gizmoCenter + glm::vec3(1.0f, 0.0f, 0.0f), screenPosX)) {
+        if (getValidScreenPos(gizmoCenter + glm::vec3(gizmoScale, 0.0f, 0.0f), screenPosX)) {
             if (glm::length(screenPosX - screenOrigin) >= minScreenLengthForHit) {
                 distX = distToSegment(mousePos, screenOrigin, screenPosX);
             }
         }
 
-        if (getValidScreenPos(gizmoCenter + glm::vec3(0.0f, 1.0f, 0.0f), screenPosY)) {
+        if (getValidScreenPos(gizmoCenter + glm::vec3(0.0f, gizmoScale, 0.0f), screenPosY)) {
             if (glm::length(screenPosY - screenOrigin) >= minScreenLengthForHit) {
                 distY = distToSegment(mousePos, screenOrigin, screenPosY);
             }
         }
 
-        if (getValidScreenPos(gizmoCenter + glm::vec3(0.0f, 0.0f, -1.0f), screenPosZ)) {
+        if (getValidScreenPos(gizmoCenter + glm::vec3(0.0f, 0.0f, gizmoScale), screenPosZ)) {
             if (glm::length(screenPosZ - screenOrigin) >= minScreenLengthForHit) {
                 distZ = distToSegment(mousePos, screenOrigin, screenPosZ);
             }
@@ -392,7 +388,6 @@ namespace slate {
                         if (hitAxis != -1) {
                             auto& sceneMeshes = static_cast<VulkanRenderer*>(m_renderer.get())->getSceneMeshes();
                             if (!sceneMeshes.empty() && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
-                                m_isDraggingGizmo = true;
                                 m_activeGizmoAxis = hitAxis;
                                 m_gizmoDragStartPos = mousePos;
 
@@ -401,14 +396,15 @@ namespace slate {
                                 else if (hitAxis == 1) worldAxis = glm::vec3(0.0f, 1.0f, 0.0f);
                                 else if (hitAxis == 2) worldAxis = glm::vec3(0.0f, 0.0f, 1.0f);
 
-                                glm::vec3 gizmoCenter = sceneMeshes[m_selectedMeshIndex]->getGeometricCenter();
+                                auto& mesh = sceneMeshes[m_selectedMeshIndex];
+                                glm::vec3 gizmoCenter = glm::vec3(mesh->getModelMatrix() * glm::vec4(mesh->getGeometricCenter(), 1.0f));
                                 m_gizmoPlaneOrigin = gizmoCenter;
 
                                 glm::mat4 invView = glm::inverse(m_camera.getViewMatrix());
                                 glm::vec3 camDir = -glm::vec3(invView[2]);
                                 glm::vec3 camRight = glm::vec3(invView[0]);
                                 glm::vec3 camUp = glm::vec3(invView[1]);
-                                
+
                                 glm::vec3 N;
                                 if (std::abs(glm::dot(camDir, worldAxis)) > 0.95f) {
                                     N = (std::abs(worldAxis.x) > 0.5f) ? camUp : camRight;
@@ -417,8 +413,13 @@ namespace slate {
                                 }
                                 m_gizmoPlaneNormal = glm::normalize(N);
 
-                                Ray ray = screenPointToRay(m_window, m_viewportPanel, m_camera, mousePos);
-                                intersectRayPlane(ray.origin, ray.direction, m_gizmoPlaneOrigin, m_gizmoPlaneNormal, m_lastRayIntersection);
+                                Ray ray = screenPointToRay(mousePos);
+                                if (intersectRayPlane(ray.origin, ray.direction, m_gizmoPlaneOrigin, m_gizmoPlaneNormal, m_lastRayIntersection)) {
+                                    m_isDraggingGizmo = true;
+                                    m_gizmoLastIntersection = m_lastRayIntersection;
+                                } else {
+                                    m_isDraggingGizmo = false;
+                                }
 
                                 std::cout << "started dragging gizmo on axis: " << hitAxis << "\n";
                             }
@@ -454,14 +455,19 @@ namespace slate {
                             else if (m_activeGizmoAxis == 1) worldAxis = glm::vec3(0.0f, 1.0f, 0.0f);
                             else if (m_activeGizmoAxis == 2) worldAxis = glm::vec3(0.0f, 0.0f, 1.0f);
 
-                            Ray ray = screenPointToRay(m_window, m_viewportPanel, m_camera, currentMousePos);
+                            Ray ray = screenPointToRay(currentMousePos);
                             glm::vec3 currentIntersection;
                             if (intersectRayPlane(ray.origin, ray.direction, m_gizmoPlaneOrigin, m_gizmoPlaneNormal, currentIntersection)) {
-                                float delta = glm::dot(currentIntersection - m_lastRayIntersection, worldAxis);
-                                glm::vec3 translationDelta = worldAxis * delta;
+                                glm::vec3 frameWorldDelta = currentIntersection - m_gizmoLastIntersection;
+                                m_gizmoLastIntersection = currentIntersection;
 
-                                sceneMeshes[m_selectedMeshIndex]->translate(translationDelta);
-                                m_lastRayIntersection = currentIntersection;
+                                float frameAxisDelta = glm::dot(frameWorldDelta, worldAxis);
+
+                                glm::vec3 translationDelta = worldAxis * frameAxisDelta;
+                                if (glm::length(translationDelta) > 0.0001f) {
+                                    TranslateMeshCommand translateCmd(m_selectedMeshIndex, translationDelta);
+                                    translateCmd.execute(m_commandContext);
+                                }
                             }
                         }
                     } else if (m_cursorLocked) {
@@ -472,10 +478,18 @@ namespace slate {
                 if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
                     int w = event.window.data1;
                     int h = event.window.data2;
+
                     m_renderer->onWindowResize(w, h);
 
                     if (m_uiManager) {
                         m_uiManager->setScreenSize(static_cast<float>(w), static_cast<float>(h));
+
+                        auto rootElement = m_uiManager->getRootElement();
+                        if (rootElement) {
+                            rootElement->setSize(glm::vec2(static_cast<float>(w), static_cast<float>(h)));
+                        }
+
+                        m_uiManager->markDirty();
                     }
                 }
             }
@@ -494,7 +508,10 @@ namespace slate {
                 static_cast<VulkanRenderer*>(m_renderer.get())->updateUIGeometryBuffers(vertices, indices);
             }
 
-            m_renderer->drawFrame(m_camera.getViewMatrix());
+            glm::vec2 vpOffset = m_viewportPanel ? m_viewportPanel->getAbsolutePosition() : glm::vec2(0.0f);
+            glm::vec2 vpSize = m_viewportPanel ? m_viewportPanel->getSize() : glm::vec2(static_cast<float>(m_width), static_cast<float>(m_height));
+
+            m_renderer->drawFrame(m_camera.getViewMatrix(), vpOffset, vpSize);
         }
 
         vkDeviceWaitIdle(static_cast<VulkanRenderer*>(m_renderer.get())->getDevice());

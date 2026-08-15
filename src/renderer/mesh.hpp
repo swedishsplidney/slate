@@ -35,7 +35,7 @@ namespace slate {
             m_modelMatrix = glm::translate(m_modelMatrix, delta);
         }
 
-        glm::vec3 getGeometricCenter() const { return m_modelMatrix * glm::vec4(m_geometricCenter, 1.0f); }
+        glm::vec3 getGeometricCenter() const { return m_geometricCenter; }
 
     private:
         void createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices);

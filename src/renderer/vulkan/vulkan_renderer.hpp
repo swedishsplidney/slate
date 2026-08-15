@@ -49,7 +49,7 @@ namespace slate {
         ~VulkanRenderer() override;
 
         void init() override;
-        void drawFrame(const glm::mat4& viewMatrix) override;
+        void drawFrame(const glm::mat4& viewMatrix, glm::vec2 viewportOffset, glm::vec2 viewportSize) override;
         void cleanup() override;
 
         VkDevice getDevice() const { return m_device; }
@@ -115,7 +115,7 @@ namespace slate {
         void createSyncObjects();
         void createCommandPool();
         void createCommandBuffer();
-        void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const glm::mat4& viewMatrix);
+        void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const glm::mat4& viewMatrix, glm::vec2 viewportOffset, glm::vec2 viewportSize);
         void createDescriptorSetLayout();
         void createGraphicsPipeline();
 

@@ -11,6 +11,8 @@ namespace slate {
         // return view matrix
         glm::mat4 getViewMatrix() const;
 
+        glm::vec3 getPosition() const { return m_position; }
+
         // process kb inputs
         void processKeyboard(const bool* keyboardState, float deltaTime);
 

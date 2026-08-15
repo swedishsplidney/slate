@@ -1,7 +1,7 @@
 #include "translate_commands.hpp"
 #include "renderer/vulkan/vulkan_renderer.hpp"
 #include "ui/ui_manager.hpp"
-#include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
 
 namespace slate {
 
@@ -13,8 +13,7 @@ namespace slate {
             auto vkRenderer = static_cast<VulkanRenderer*>(context.renderer);
             auto& meshes = vkRenderer->getSceneMeshes();
             if (m_meshIndex < meshes.size() && meshes[m_meshIndex]) {
-                glm::mat4 current = meshes[m_meshIndex]->getModelMatrix();
-                meshes[m_meshIndex]->setModelMatrix(glm::translate(glm::mat4(1.0f), m_translationDelta) * current);
+                meshes[m_meshIndex]->translate(m_translationDelta);
             }
         }
         if (context.uiManager) {
@@ -28,8 +27,7 @@ namespace slate {
             auto vkRenderer = static_cast<VulkanRenderer*>(context.renderer);
             auto& meshes = vkRenderer->getSceneMeshes();
             if (m_meshIndex < meshes.size() && meshes[m_meshIndex]) {
-                glm::mat4 current = meshes[m_meshIndex]->getModelMatrix();
-                meshes[m_meshIndex]->setModelMatrix(glm::translate(glm::mat4(1.0f), -m_translationDelta) * current);
+                meshes[m_meshIndex]->translate(-m_translationDelta);
             }
         }
         if (context.uiManager) {

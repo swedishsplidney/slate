@@ -11,6 +11,11 @@
 
 namespace slate {
 
+    struct Ray {
+        glm::vec3 origin;
+        glm::vec3 direction;
+    };
+
     class Engine {
     public:
         Engine();
@@ -18,6 +23,8 @@ namespace slate {
 
         Engine(const Engine&) = delete;
         Engine& operator=(const Engine&) = delete;
+
+        Ray screenPointToRay(glm::vec2 mousePos);
 
         void run();
 
@@ -58,6 +65,9 @@ namespace slate {
         glm::vec3 m_gizmoPlaneOrigin;
         glm::vec3 m_gizmoPlaneNormal;
         glm::vec3 m_lastRayIntersection;
+
+        glm::vec3 m_gizmoDragStartIntersection{0.0f};
+        glm::vec3 m_gizmoLastIntersection{0.0f};
     };
 
 }

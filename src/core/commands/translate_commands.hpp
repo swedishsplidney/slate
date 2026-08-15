@@ -11,7 +11,7 @@ namespace slate {
 
         bool execute(const CommandContext& context) override;
         bool undo(const CommandContext& context) override;
-        
+
         const std::string& getName() const override {
             static const std::string name = "TranslateMeshCommand";
             return name;

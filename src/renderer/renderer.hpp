@@ -9,7 +9,7 @@ namespace slate {
         virtual ~Renderer() = default;
 
         virtual void init() = 0;
-        virtual void drawFrame(const glm::mat4& viewMatrix) = 0;
+        virtual void drawFrame(const glm::mat4& viewMatrix, glm::vec2 viewportOffset, glm::vec2 viewportSize) = 0;
         virtual void cleanup() = 0;
         virtual void onWindowResize(int width, int height) {}
     };
