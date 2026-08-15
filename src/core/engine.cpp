@@ -25,8 +25,9 @@ namespace slate {
         float viewportWidth = viewportPanel->getSize().x;
         float viewportHeight = viewportPanel->getSize().y;
 
-        float viewportX = mousePos.x - viewportPanel->getAbsolutePosition().x;
-        float viewportY = mousePos.y - viewportPanel->getAbsolutePosition().y;
+        glm::vec2 panelAbsPos = viewportPanel->getAbsolutePosition();
+        float viewportX = mousePos.x - panelAbsPos.x;
+        float viewportY = mousePos.y - panelAbsPos.y;
 
         float ndcX = (2.0f * viewportX) / viewportWidth - 1.0f;
         float ndcY = (2.0f * viewportY) / viewportHeight - 1.0f;
@@ -406,16 +407,13 @@ namespace slate {
                                 glm::mat4 invView = glm::inverse(m_camera.getViewMatrix());
                                 glm::vec3 camDir = -glm::vec3(invView[2]);
                                 glm::vec3 camRight = glm::vec3(invView[0]);
-
-                                glm::vec3 crossCheck = glm::cross(camDir, worldAxis);
+                                glm::vec3 camUp = glm::vec3(invView[1]);
+                                
                                 glm::vec3 N;
-                                if (glm::length(crossCheck) < 0.001f) {
-                                    N = glm::cross(worldAxis, camRight);
-                                    if (glm::length(N) < 0.001f) {
-                                        N = camRight;
-                                    }
+                                if (std::abs(glm::dot(camDir, worldAxis)) > 0.95f) {
+                                    N = (std::abs(worldAxis.x) > 0.5f) ? camUp : camRight;
                                 } else {
-                                    N = glm::cross(worldAxis, crossCheck);
+                                    N = glm::cross(worldAxis, glm::cross(camDir, worldAxis));
                                 }
                                 m_gizmoPlaneNormal = glm::normalize(N);
 
