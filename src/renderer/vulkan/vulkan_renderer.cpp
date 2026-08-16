@@ -903,29 +903,30 @@ namespace slate {
             mesh->draw(commandBuffer);
         }
 
-        if (m_gizmoMesh && m_gizmoPipeline != VK_NULL_HANDLE && m_gizmoMode == GizmoMode::Translate) {
+        if (m_gizmoMesh && m_gizmoPipeline != VK_NULL_HANDLE && m_gizmoMode == GizmoMode::Translate &&
+            m_selectedMeshIndex >= 0 && m_selectedMeshIndex < static_cast<int>(m_sceneMeshes.size()) &&
+            m_sceneMeshes[m_selectedMeshIndex] != nullptr) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gizmoPipeline);
             m_gizmoMesh->bind(commandBuffer);
 
-            glm::vec3 gizmoPos(0.0f);
-            if (!m_sceneMeshes.empty() && m_sceneMeshes[m_selectedMeshIndex]) {
-                auto& mesh = m_sceneMeshes[m_selectedMeshIndex];
-                glm::vec4 worldCenter = mesh->getModelMatrix() * glm::vec4(mesh->getGeometricCenter(), 1.0f);
-                gizmoPos = glm::vec3(worldCenter);
-            }
+            auto &mesh = m_sceneMeshes[m_selectedMeshIndex];
+            glm::vec4 worldCenter = mesh->getModelMatrix() * glm::vec4(mesh->getGeometricCenter(), 1.0f);
+            glm::vec3 gizmoPos = glm::vec3(worldCenter);
+
             float dist = glm::distance(cameraPos, gizmoPos);
             float t = dist / (dist + 8.0f);
             float gizmoScale = glm::mix(0.05f, 1.0f, t);
 
             glm::mat4 gizmoModelMatrix = glm::translate(glm::mat4(1.0f), gizmoPos) *
-                                       glm::scale(glm::mat4(1.0f), glm::vec3(gizmoScale));
+                                         glm::scale(glm::mat4(1.0f), glm::vec3(gizmoScale));
 
             struct GizmoPushConstants {
                 glm::mat4 modelMatrix;
                 glm::mat4 viewProjMatrix;
             } gizmoPushData{gizmoModelMatrix, proj * viewMatrix};
 
-            vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GizmoPushConstants), &gizmoPushData);
+            vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                               sizeof(GizmoPushConstants), &gizmoPushData);
             m_gizmoMesh->draw(commandBuffer);
         }
 

@@ -25,7 +25,6 @@ namespace slate {
         void draw(VkCommandBuffer commandBuffer);
 
         uint32_t getMaterialId() const { return m_materialId; }
-
         bool isTransparent() const { return m_transparent; }
 
         void setModelMatrix(const glm::mat4& matrix) { m_modelMatrix = matrix; }
@@ -36,6 +35,9 @@ namespace slate {
         }
 
         glm::vec3 getGeometricCenter() const { return m_geometricCenter; }
+
+        const std::vector<Vertex>& getVertices() const { return m_vertices; }
+        const std::vector<uint16_t>& getIndices() const { return m_indices; }
 
     private:
         void createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices);
@@ -51,11 +53,13 @@ namespace slate {
         uint32_t m_indexCount = 0;
 
         uint32_t m_materialId = 0;
-
         bool m_transparent = false;
 
         glm::mat4 m_modelMatrix{1.0f};
         glm::vec3 m_geometricCenter{0.0f};
+
+        std::vector<Vertex> m_vertices;
+        std::vector<uint16_t> m_indices;
     };
 
 }

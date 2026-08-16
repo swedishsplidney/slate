@@ -12,7 +12,9 @@ namespace slate {
     : m_device(device),
       m_vertexCount(static_cast<uint32_t>(vertices.size())),
       m_materialId(materialId),
-      m_transparent(transparent) {
+      m_transparent(transparent),
+      m_vertices(vertices),
+      m_indices(indices) {
         createVertexBuffer(physicalDevice, vertices);
         createIndexBuffer(physicalDevice, indices);
     }
@@ -47,7 +49,6 @@ namespace slate {
     }
 
     void Mesh::createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices) {
-
         glm::vec3 minBounds(1e30f);
         glm::vec3 maxBounds(-1e30f);
         for (const auto& v : vertices) {

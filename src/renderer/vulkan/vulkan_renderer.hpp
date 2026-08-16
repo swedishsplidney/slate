@@ -100,6 +100,8 @@ namespace slate {
         const std::vector<std::unique_ptr<Mesh>>& getSceneMeshes() const { return m_sceneMeshes; }
         std::vector<std::unique_ptr<Mesh>>& getSceneMeshes() { return m_sceneMeshes; }
 
+        void setSelectedMeshIndex(int index) { m_selectedMeshIndex = index; }
+
     private:
         void createInstance();
         void createSurface();

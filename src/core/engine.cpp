@@ -391,6 +391,7 @@ namespace slate {
                         int hitAxis = checkGizmoHit(mousePos);
 
                         if (hitAxis != -1) {
+                            // gizmo
                             auto& sceneMeshes = static_cast<VulkanRenderer*>(m_renderer.get())->getSceneMeshes();
                             if (!sceneMeshes.empty() && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
                                 m_activeGizmoAxis = hitAxis;
@@ -427,6 +428,60 @@ namespace slate {
                                 }
 
                                 std::cout << "started dragging gizmo on axis: " << hitAxis << "\n";
+                            }
+                        }
+                        else {
+                            auto& sceneMeshes = static_cast<VulkanRenderer*>(m_renderer.get())->getSceneMeshes();
+                            int closestMeshIndex = -1;
+                            float closestDist = std::numeric_limits<float>::max();
+
+                            Ray ray = screenPointToRay(mousePos);
+
+                            for (size_t i = 0; i < sceneMeshes.size(); ++i) {
+                                if (!sceneMeshes[i]) continue;
+
+                                glm::mat4 invModel = glm::inverse(sceneMeshes[i]->getModelMatrix());
+                                glm::vec3 localOrigin = glm::vec3(invModel * glm::vec4(ray.origin, 1.0f));
+                                glm::vec3 localDir = glm::normalize(glm::vec3(invModel * glm::vec4(ray.direction, 0.0f)));
+
+                                const auto& vertices = sceneMeshes[i]->getVertices();
+                                const auto& indices = sceneMeshes[i]->getIndices();
+
+                                for (size_t j = 0; j < indices.size(); j += 3) {
+                                    glm::vec3 v0 = vertices[indices[j]].pos;
+                                    glm::vec3 v1 = vertices[indices[j + 1]].pos;
+                                    glm::vec3 v2 = vertices[indices[j + 2]].pos;
+
+                                    glm::vec3 edge1 = v1 - v0;
+                                    glm::vec3 edge2 = v2 - v0;
+                                    glm::vec3 h = glm::cross(localDir, edge2);
+                                    float a = glm::dot(edge1, h);
+
+                                    if (a > -0.00001f && a < 0.00001f) continue;
+
+                                    float f = 1.0f / a;
+                                    glm::vec3 s = localOrigin - v0;
+                                    float u = f * glm::dot(s, h);
+                                    if (u < 0.0f || u > 1.0f) continue;
+
+                                    glm::vec3 q = glm::cross(s, edge1);
+                                    float v = f * glm::dot(localDir, q);
+                                    if (v < 0.0f || u + v > 1.0f) continue;
+
+                                    float t = f * glm::dot(edge2, q);
+                                    if (t > 0.0001f && t < closestDist) {
+                                        closestDist = t;
+                                        closestMeshIndex = static_cast<int>(i);
+                                    }
+                                }
+                            }
+
+                            m_selectedMeshIndex = closestMeshIndex;
+
+                            if (m_selectedMeshIndex != -1) {
+                                std::cout << "selected new mesh index: " << m_selectedMeshIndex << "\n";
+                            } else {
+                                std::cout << "deselected\n";
                             }
                         }
 
@@ -515,6 +570,9 @@ namespace slate {
 
                 static_cast<VulkanRenderer*>(m_renderer.get())->updateUIGeometryBuffers(vertices, indices);
             }
+
+            auto vkRenderer = static_cast<VulkanRenderer*>(m_renderer.get());
+            vkRenderer->setSelectedMeshIndex(m_selectedMeshIndex);
 
             glm::vec2 vpOffset(0.0f, 0.0f);
             glm::vec2 vpSize(static_cast<float>(m_width), static_cast<float>(m_height));
