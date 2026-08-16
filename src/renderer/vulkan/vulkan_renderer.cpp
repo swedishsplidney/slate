@@ -917,7 +917,10 @@ namespace slate {
             float t = dist / (dist + 8.0f);
             float gizmoScale = glm::mix(0.05f, 1.0f, t);
 
+            glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
             glm::mat4 gizmoModelMatrix = glm::translate(glm::mat4(1.0f), gizmoPos) *
+                                         rotation *
                                          glm::scale(glm::mat4(1.0f), glm::vec3(gizmoScale));
 
             struct GizmoPushConstants {

@@ -289,23 +289,28 @@ namespace slate {
             return -1;
         }
 
+        glm::mat3 rotMat = glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+        glm::vec3 axisX = rotMat * glm::vec3(1.0f, 0.0f, 0.0f);
+        glm::vec3 axisY = rotMat * glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 axisZ = rotMat * glm::vec3(0.0f, 0.0f, 1.0f);
+
         float distX = 99999.0f, distY = 99999.0f, distZ = 99999.0f;
         glm::vec2 screenPosX, screenPosY, screenPosZ;
         const float minScreenLengthForHit = 5.0f;
 
-        if (getValidScreenPos(gizmoCenter + glm::vec3(gizmoScale, 0.0f, 0.0f), screenPosX)) {
+        if (getValidScreenPos(gizmoCenter + axisX * gizmoScale, screenPosX)) {
             if (glm::length(screenPosX - screenOrigin) >= minScreenLengthForHit) {
                 distX = distToSegment(mousePos, screenOrigin, screenPosX);
             }
         }
 
-        if (getValidScreenPos(gizmoCenter + glm::vec3(0.0f, gizmoScale, 0.0f), screenPosY)) {
+        if (getValidScreenPos(gizmoCenter + axisY * gizmoScale, screenPosY)) {
             if (glm::length(screenPosY - screenOrigin) >= minScreenLengthForHit) {
                 distY = distToSegment(mousePos, screenOrigin, screenPosY);
             }
         }
 
-        if (getValidScreenPos(gizmoCenter + glm::vec3(0.0f, 0.0f, gizmoScale), screenPosZ)) {
+        if (getValidScreenPos(gizmoCenter + axisZ * gizmoScale, screenPosZ)) {
             if (glm::length(screenPosZ - screenOrigin) >= minScreenLengthForHit) {
                 distZ = distToSegment(mousePos, screenOrigin, screenPosZ);
             }
@@ -397,10 +402,15 @@ namespace slate {
                                 m_activeGizmoAxis = hitAxis;
                                 m_gizmoDragStartPos = mousePos;
 
+                                glm::mat3 rotMat = glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+                                glm::vec3 axisX = rotMat * glm::vec3(1.0f, 0.0f, 0.0f);
+                                glm::vec3 axisY = rotMat * glm::vec3(0.0f, 1.0f, 0.0f);
+                                glm::vec3 axisZ = rotMat * glm::vec3(0.0f, 0.0f, 1.0f);
+
                                 glm::vec3 worldAxis(0.0f);
-                                if (hitAxis == 0) worldAxis = glm::vec3(1.0f, 0.0f, 0.0f);
-                                else if (hitAxis == 1) worldAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-                                else if (hitAxis == 2) worldAxis = glm::vec3(0.0f, 0.0f, 1.0f);
+                                if (hitAxis == 0) worldAxis = axisX;
+                                else if (hitAxis == 1) worldAxis = axisY;
+                                else if (hitAxis == 2) worldAxis = axisZ;
 
                                 auto& mesh = sceneMeshes[m_selectedMeshIndex];
                                 glm::vec3 gizmoCenter = glm::vec3(mesh->getModelMatrix() * glm::vec4(mesh->getGeometricCenter(), 1.0f));
@@ -426,8 +436,6 @@ namespace slate {
                                 } else {
                                     m_isDraggingGizmo = false;
                                 }
-
-                                std::cout << "started dragging gizmo on axis: " << hitAxis << "\n";
                             }
                         }
                         else {
@@ -477,12 +485,6 @@ namespace slate {
                             }
 
                             m_selectedMeshIndex = closestMeshIndex;
-
-                            if (m_selectedMeshIndex != -1) {
-                                std::cout << "selected new mesh index: " << m_selectedMeshIndex << "\n";
-                            } else {
-                                std::cout << "deselected\n";
-                            }
                         }
 
                         m_viewportFocused = clickInsideViewport;
@@ -510,10 +512,15 @@ namespace slate {
                         if (!sceneMeshes.empty() && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
                             glm::vec2 currentMousePos(event.motion.x, event.motion.y);
 
+                            glm::mat3 rotMat = glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+                            glm::vec3 axisX = rotMat * glm::vec3(1.0f, 0.0f, 0.0f);
+                            glm::vec3 axisY = rotMat * glm::vec3(0.0f, 1.0f, 0.0f);
+                            glm::vec3 axisZ = rotMat * glm::vec3(0.0f, 0.0f, 1.0f);
+
                             glm::vec3 worldAxis(0.0f);
-                            if (m_activeGizmoAxis == 0) worldAxis = glm::vec3(1.0f, 0.0f, 0.0f);
-                            else if (m_activeGizmoAxis == 1) worldAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-                            else if (m_activeGizmoAxis == 2) worldAxis = glm::vec3(0.0f, 0.0f, 1.0f);
+                            if (m_activeGizmoAxis == 0) worldAxis = axisX;
+                            else if (m_activeGizmoAxis == 1) worldAxis = axisY;
+                            else if (m_activeGizmoAxis == 2) worldAxis = axisZ;
 
                             Ray ray = screenPointToRay(currentMousePos);
                             glm::vec3 currentIntersection;
