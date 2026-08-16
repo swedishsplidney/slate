@@ -7,6 +7,7 @@
 #include "core/commands/file_commands.hpp"
 #include "core/commands/editor_commands.hpp"
 #include "core/commands/translate_commands.hpp"
+#include "core/commands/rotate_commands.hpp"
 #include "ui/ui_menu_bar.hpp"
 
 #include <stdexcept>
@@ -203,6 +204,11 @@ namespace slate {
         m_commandRegistry->registerCommand("editor.translate_mesh", [this](const CommandRegistry::CommandArgs& args) {
             glm::vec3 delta(0.0f, 0.5f, 0.0f);
             return std::make_unique<TranslateMeshCommand>(m_selectedMeshIndex, delta);
+        });
+
+        m_commandRegistry->registerCommand("editor.rotate_mesh", [this](const CommandRegistry::CommandArgs& args) {
+            glm::quat deltaRot = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            return std::make_unique<RotateMeshCommand>(m_selectedMeshIndex, deltaRot);
         });
     }
 

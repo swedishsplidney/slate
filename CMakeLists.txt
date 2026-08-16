@@ -59,6 +59,8 @@ add_executable(slate
         src/resources/gizmo_generator.hpp
         src/core/commands/translate_commands.cpp
         src/core/commands/translate_commands.hpp
+        src/core/commands/rotate_commands.cpp
+        src/core/commands/rotate_commands.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
