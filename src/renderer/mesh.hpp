@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 namespace slate {
 
@@ -32,6 +33,10 @@ namespace slate {
 
         void translate(const glm::vec3& delta) {
             m_modelMatrix = glm::translate(m_modelMatrix, delta);
+        }
+
+        void rotate(const glm::quat& rotation) {
+            m_modelMatrix = m_modelMatrix * glm::mat4_cast(rotation);
         }
 
         glm::vec3 getGeometricCenter() const { return m_geometricCenter; }
