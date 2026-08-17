@@ -264,6 +264,9 @@ namespace slate {
             return -1;
         }
 
+        auto vkRenderer = static_cast<VulkanRenderer*>(m_renderer.get());
+        auto gizmoMode = vkRenderer->getGizmoMode();
+
         auto& mesh = sceneMeshes[m_selectedMeshIndex];
         glm::vec3 gizmoCenter = glm::vec3(mesh->getModelMatrix() * glm::vec4(mesh->getGeometricCenter(), 1.0f));
 
@@ -301,28 +304,60 @@ namespace slate {
         glm::vec3 axisZ = rotMat * glm::vec3(0.0f, 0.0f, 1.0f);
 
         float distX = 99999.0f, distY = 99999.0f, distZ = 99999.0f;
-        glm::vec2 screenPosX, screenPosY, screenPosZ;
-        const float minScreenLengthForHit = 5.0f;
-
-        if (getValidScreenPos(gizmoCenter + axisX * gizmoScale, screenPosX)) {
-            if (glm::length(screenPosX - screenOrigin) >= minScreenLengthForHit) {
-                distX = distToSegment(mousePos, screenOrigin, screenPosX);
-            }
-        }
-
-        if (getValidScreenPos(gizmoCenter + axisY * gizmoScale, screenPosY)) {
-            if (glm::length(screenPosY - screenOrigin) >= minScreenLengthForHit) {
-                distY = distToSegment(mousePos, screenOrigin, screenPosY);
-            }
-        }
-
-        if (getValidScreenPos(gizmoCenter + axisZ * gizmoScale, screenPosZ)) {
-            if (glm::length(screenPosZ - screenOrigin) >= minScreenLengthForHit) {
-                distZ = distToSegment(mousePos, screenOrigin, screenPosZ);
-            }
-        }
-
         float threshold = 12.0f;
+
+        if (gizmoMode == VulkanRenderer::GizmoMode::Translate) {
+            glm::vec2 screenPosX, screenPosY, screenPosZ;
+            const float minScreenLengthForHit = 5.0f;
+
+            if (getValidScreenPos(gizmoCenter + axisX * gizmoScale, screenPosX)) {
+                if (glm::length(screenPosX - screenOrigin) >= minScreenLengthForHit) {
+                    distX = distToSegment(mousePos, screenOrigin, screenPosX);
+                }
+            }
+
+            if (getValidScreenPos(gizmoCenter + axisY * gizmoScale, screenPosY)) {
+                if (glm::length(screenPosY - screenOrigin) >= minScreenLengthForHit) {
+                    distY = distToSegment(mousePos, screenOrigin, screenPosY);
+                }
+            }
+
+            if (getValidScreenPos(gizmoCenter + axisZ * gizmoScale, screenPosZ)) {
+                if (glm::length(screenPosZ - screenOrigin) >= minScreenLengthForHit) {
+                    distZ = distToSegment(mousePos, screenOrigin, screenPosZ);
+                }
+            }
+        }
+        else if (gizmoMode == VulkanRenderer::GizmoMode::Rotate) {
+            auto checkCircleHit = [&](const glm::vec3& uAxis, const glm::vec3& vAxis) {
+                float minCircleDist = 99999.0f;
+                int segments = 32;
+                glm::vec2 prevScreenPos;
+                bool prevValid = false;
+
+                for (int i = 0; i <= segments; ++i) {
+                    float angle = (static_cast<float>(i) / segments) * 2.0f * glm::pi<float>();
+                    glm::vec3 worldPos = gizmoCenter + gizmoScale * (std::cos(angle) * uAxis + std::sin(angle) * vAxis);
+                    glm::vec2 screenPos;
+                    if (getValidScreenPos(worldPos, screenPos)) {
+                        if (prevValid) {
+                            float d = distToSegment(mousePos, prevScreenPos, screenPos);
+                            minCircleDist = std::min(minCircleDist, d);
+                        }
+                        prevScreenPos = screenPos;
+                        prevValid = true;
+                    } else {
+                        prevValid = false;
+                    }
+                }
+                return minCircleDist;
+            };
+
+            distX = checkCircleHit(axisY, axisZ);
+            distY = checkCircleHit(axisX, axisZ);
+            distZ = checkCircleHit(axisX, axisY);
+        }
+
         float minDist = std::min({distX, distY, distZ});
 
         if (minDist <= threshold) {
@@ -514,7 +549,9 @@ namespace slate {
                 // mouse motion handling
                 if (event.type == SDL_EVENT_MOUSE_MOTION) {
                     if (m_isDraggingGizmo) {
-                        auto& sceneMeshes = static_cast<VulkanRenderer*>(m_renderer.get())->getSceneMeshes();
+                        auto vkRenderer = static_cast<VulkanRenderer*>(m_renderer.get());
+                        auto& sceneMeshes = vkRenderer->getSceneMeshes();
+
                         if (!sceneMeshes.empty() && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
                             glm::vec2 currentMousePos(event.motion.x, event.motion.y);
 
@@ -528,18 +565,30 @@ namespace slate {
                             else if (m_activeGizmoAxis == 1) worldAxis = axisY;
                             else if (m_activeGizmoAxis == 2) worldAxis = axisZ;
 
-                            Ray ray = screenPointToRay(currentMousePos);
-                            glm::vec3 currentIntersection;
-                            if (intersectRayPlane(ray.origin, ray.direction, m_gizmoPlaneOrigin, m_gizmoPlaneNormal, currentIntersection)) {
-                                glm::vec3 frameWorldDelta = currentIntersection - m_gizmoLastIntersection;
-                                m_gizmoLastIntersection = currentIntersection;
+                            if (vkRenderer->getGizmoMode() == VulkanRenderer::GizmoMode::Translate) {
+                                Ray ray = screenPointToRay(currentMousePos);
+                                glm::vec3 currentIntersection;
+                                if (intersectRayPlane(ray.origin, ray.direction, m_gizmoPlaneOrigin, m_gizmoPlaneNormal, currentIntersection)) {
+                                    glm::vec3 frameWorldDelta = currentIntersection - m_gizmoLastIntersection;
+                                    m_gizmoLastIntersection = currentIntersection;
 
-                                float frameAxisDelta = glm::dot(frameWorldDelta, worldAxis);
+                                    float frameAxisDelta = glm::dot(frameWorldDelta, worldAxis);
+                                    glm::vec3 translationDelta = worldAxis * frameAxisDelta;
 
-                                glm::vec3 translationDelta = worldAxis * frameAxisDelta;
-                                if (glm::length(translationDelta) > 0.0001f) {
-                                    TranslateMeshCommand translateCmd(m_selectedMeshIndex, translationDelta);
-                                    translateCmd.execute(m_commandContext);
+                                    if (glm::length(translationDelta) > 0.0001f) {
+                                        TranslateMeshCommand translateCmd(m_selectedMeshIndex, translationDelta);
+                                        translateCmd.execute(m_commandContext);
+                                    }
+                                }
+                            }
+                            else if (vkRenderer->getGizmoMode() == VulkanRenderer::GizmoMode::Rotate) {
+                                float sensitivity = 0.01f;
+                                float deltaAngle = (event.motion.xrel - event.motion.yrel) * sensitivity;
+
+                                if (std::abs(deltaAngle) > 0.0001f) {
+                                    glm::quat deltaRot = glm::angleAxis(deltaAngle, worldAxis);
+                                    RotateMeshCommand rotateCmd(m_selectedMeshIndex, deltaRot);
+                                    rotateCmd.execute(m_commandContext);
                                 }
                             }
                         }

@@ -903,7 +903,7 @@ namespace slate {
             mesh->draw(commandBuffer);
         }
 
-        if (m_gizmoMesh && m_gizmoPipeline != VK_NULL_HANDLE && m_gizmoMode == GizmoMode::Translate &&
+        if (m_gizmoMesh && m_gizmoPipeline != VK_NULL_HANDLE && (m_gizmoMode == GizmoMode::Translate || m_gizmoMode == GizmoMode::Rotate) &&
             m_selectedMeshIndex >= 0 && m_selectedMeshIndex < static_cast<int>(m_sceneMeshes.size()) &&
             m_sceneMeshes[m_selectedMeshIndex] != nullptr) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gizmoPipeline);
@@ -1601,6 +1601,17 @@ namespace slate {
         std::vector<uint16_t> indices;
 
         GizmoGenerator::generateTranslateGizmo(vertices, indices);
+
+        m_gizmoMesh = std::make_unique<Mesh>(m_device, m_physicalDevice, vertices, indices);
+    }
+
+    void VulkanRenderer::setGizmoMode(GizmoMode mode) {
+        m_gizmoMode = mode;
+
+        std::vector<Vertex> vertices;
+        std::vector<uint16_t> indices;
+
+        GizmoGenerator::generateGizmo(static_cast<GizmoGenerator::Mode>(mode), vertices, indices);
 
         m_gizmoMesh = std::make_unique<Mesh>(m_device, m_physicalDevice, vertices, indices);
     }

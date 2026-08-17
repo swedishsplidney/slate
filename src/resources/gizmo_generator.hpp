@@ -9,6 +9,19 @@ namespace slate {
 
     class GizmoGenerator {
     public:
+        enum class Mode {
+            Translate = 0,
+            Rotate = 1
+        };
+
+        static void generateGizmo(Mode mode, std::vector<Vertex>& outVertices, std::vector<uint16_t>& outIndices) {
+            if (mode == Mode::Translate) {
+                generateTranslateGizmo(outVertices, outIndices);
+            } else if (mode == Mode::Rotate) {
+                generateRotateGizmo(outVertices, outIndices);
+            }
+        }
+
         static void generateTranslateGizmo(std::vector<Vertex>& outVertices, std::vector<uint16_t>& outIndices) {
             outVertices.clear();
             outIndices.clear();
@@ -87,6 +100,60 @@ namespace slate {
             add3DArrow(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.85f, 0.22f, 0.22f));
             add3DArrow(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.22f, 0.75f, 0.22f));
             add3DArrow(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.22f, 0.40f, 0.85f));
+        }
+
+        static void generateRotateGizmo(std::vector<Vertex>& outVertices, std::vector<uint16_t>& outIndices) {
+            outVertices.clear();
+            outIndices.clear();
+
+            auto addRotationRing = [&](glm::vec3 axis, glm::vec3 color) {
+                int ringSegments = 36;
+                int tubeSegments = 6;
+                float ringRadius = 1.0f;
+                float tubeRadius = 0.03f;
+
+                glm::vec3 up = (std::abs(axis.y) < 0.99f) ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+                glm::vec3 tangent = glm::normalize(glm::cross(axis, up));
+                glm::vec3 bitangent = glm::normalize(glm::cross(axis, tangent));
+
+                uint16_t baseIndex = static_cast<uint16_t>(outVertices.size());
+
+                for (int i = 0; i <= ringSegments; ++i) {
+                    float phi = (static_cast<float>(i) / ringSegments) * 2.0f * 3.14159265359f;
+                    glm::vec3 ringCenterDir = tangent * std::cos(phi) + bitangent * std::sin(phi);
+                    glm::vec3 ringCenter = ringCenterDir * ringRadius;
+
+                    for (int j = 0; j <= tubeSegments; ++j) {
+                        float theta = (static_cast<float>(j) / tubeSegments) * 2.0f * 3.14159265359f;
+                        glm::vec3 tubeOffset = (ringCenterDir * std::cos(theta) + axis * std::sin(theta)) * tubeRadius;
+                        outVertices.push_back({ ringCenter + tubeOffset, color, glm::vec3(0), glm::vec2(0) });
+                    }
+                }
+
+                for (int i = 0; i < ringSegments; ++i) {
+                    for (int j = 0; j < tubeSegments; ++j) {
+                        uint16_t row1 = i * (tubeSegments + 1);
+                        uint16_t row2 = (i + 1) * (tubeSegments + 1);
+
+                        uint16_t v0 = baseIndex + row1 + j;
+                        uint16_t v1 = baseIndex + row1 + j + 1;
+                        uint16_t v2 = baseIndex + row2 + j;
+                        uint16_t v3 = baseIndex + row2 + j + 1;
+
+                        outIndices.push_back(v0);
+                        outIndices.push_back(v2);
+                        outIndices.push_back(v1);
+
+                        outIndices.push_back(v1);
+                        outIndices.push_back(v2);
+                        outIndices.push_back(v3);
+                    }
+                }
+            };
+
+            addRotationRing(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.85f, 0.22f, 0.22f));
+            addRotationRing(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.22f, 0.75f, 0.22f));
+            addRotationRing(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.22f, 0.40f, 0.85f));
         }
     };
 

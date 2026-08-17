@@ -90,10 +90,6 @@ namespace slate {
         bool isGridEnabled() const { return m_showGrid; }
         void toggleGrid() { m_showGrid = !m_showGrid; }
 
-        enum class GizmoMode { Translate, Rotate, Scale };
-        void setGizmoMode(GizmoMode mode) { m_gizmoMode = mode; }
-        GizmoMode getGizmoMode() const { return m_gizmoMode; }
-
         std::unique_ptr<Mesh> m_gridMesh;
         std::unique_ptr<Mesh> m_axesMesh;
 
@@ -101,6 +97,14 @@ namespace slate {
         std::vector<std::unique_ptr<Mesh>>& getSceneMeshes() { return m_sceneMeshes; }
 
         void setSelectedMeshIndex(int index) { m_selectedMeshIndex = index; }
+
+        enum class GizmoMode {
+            Translate = 0,
+            Rotate = 1
+        };
+
+        void setGizmoMode(GizmoMode mode);
+        GizmoMode getGizmoMode() const { return m_gizmoMode; }
 
     private:
         void createInstance();
