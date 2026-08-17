@@ -298,10 +298,18 @@ namespace slate {
             return -1;
         }
 
-        glm::mat3 rotMat = glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
-        glm::vec3 axisX = rotMat * glm::vec3(1.0f, 0.0f, 0.0f);
-        glm::vec3 axisY = rotMat * glm::vec3(0.0f, 1.0f, 0.0f);
-        glm::vec3 axisZ = rotMat * glm::vec3(0.0f, 0.0f, 1.0f);
+        glm::mat4 modelMat = mesh->getModelMatrix();
+        glm::vec3 colX = glm::normalize(glm::vec3(modelMat[0]));
+        glm::vec3 colY = glm::normalize(glm::vec3(modelMat[1]));
+        glm::vec3 colZ = glm::normalize(glm::vec3(modelMat[2]));
+        glm::mat3 meshRot(colX, colY, colZ);
+
+        glm::mat3 assetCorrection = glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+        glm::mat3 finalRot = meshRot * assetCorrection;
+
+        glm::vec3 axisX = finalRot * glm::vec3(1.0f, 0.0f, 0.0f);
+        glm::vec3 axisY = finalRot * glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 axisZ = finalRot * glm::vec3(0.0f, 0.0f, 1.0f);
 
         float distX = 99999.0f, distY = 99999.0f, distZ = 99999.0f;
         float threshold = 12.0f;
@@ -443,17 +451,27 @@ namespace slate {
                                 m_activeGizmoAxis = hitAxis;
                                 m_gizmoDragStartPos = mousePos;
 
-                                glm::mat3 rotMat = glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
-                                glm::vec3 axisX = rotMat * glm::vec3(1.0f, 0.0f, 0.0f);
-                                glm::vec3 axisY = rotMat * glm::vec3(0.0f, 1.0f, 0.0f);
-                                glm::vec3 axisZ = rotMat * glm::vec3(0.0f, 0.0f, 1.0f);
+                                auto& mesh = sceneMeshes[m_selectedMeshIndex];
+                                glm::mat4 modelMat = mesh->getModelMatrix();
+                                glm::vec3 colX = glm::normalize(glm::vec3(modelMat[0]));
+                                glm::vec3 colY = glm::normalize(glm::vec3(modelMat[1]));
+                                glm::vec3 colZ = glm::normalize(glm::vec3(modelMat[2]));
+                                glm::mat3 meshRot(colX, colY, colZ);
+
+                                glm::mat3 assetCorrection = glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+                                glm::mat3 finalRot = meshRot * assetCorrection;
+
+                                glm::vec3 axisX = finalRot * glm::vec3(1.0f, 0.0f, 0.0f);
+                                glm::vec3 axisY = finalRot * glm::vec3(0.0f, 1.0f, 0.0f);
+                                glm::vec3 axisZ = finalRot * glm::vec3(0.0f, 0.0f, 1.0f);
 
                                 glm::vec3 worldAxis(0.0f);
                                 if (hitAxis == 0) worldAxis = axisX;
                                 else if (hitAxis == 1) worldAxis = axisY;
                                 else if (hitAxis == 2) worldAxis = axisZ;
 
-                                auto& mesh = sceneMeshes[m_selectedMeshIndex];
+                                m_dragWorldAxis = worldAxis;
+
                                 glm::vec3 gizmoCenter = glm::vec3(mesh->getModelMatrix() * glm::vec4(mesh->getGeometricCenter(), 1.0f));
                                 m_gizmoPlaneOrigin = gizmoCenter;
 
@@ -555,16 +573,6 @@ namespace slate {
                         if (!sceneMeshes.empty() && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
                             glm::vec2 currentMousePos(event.motion.x, event.motion.y);
 
-                            glm::mat3 rotMat = glm::mat3(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
-                            glm::vec3 axisX = rotMat * glm::vec3(1.0f, 0.0f, 0.0f);
-                            glm::vec3 axisY = rotMat * glm::vec3(0.0f, 1.0f, 0.0f);
-                            glm::vec3 axisZ = rotMat * glm::vec3(0.0f, 0.0f, 1.0f);
-
-                            glm::vec3 worldAxis(0.0f);
-                            if (m_activeGizmoAxis == 0) worldAxis = axisX;
-                            else if (m_activeGizmoAxis == 1) worldAxis = axisY;
-                            else if (m_activeGizmoAxis == 2) worldAxis = axisZ;
-
                             if (vkRenderer->getGizmoMode() == VulkanRenderer::GizmoMode::Translate) {
                                 Ray ray = screenPointToRay(currentMousePos);
                                 glm::vec3 currentIntersection;
@@ -572,8 +580,8 @@ namespace slate {
                                     glm::vec3 frameWorldDelta = currentIntersection - m_gizmoLastIntersection;
                                     m_gizmoLastIntersection = currentIntersection;
 
-                                    float frameAxisDelta = glm::dot(frameWorldDelta, worldAxis);
-                                    glm::vec3 translationDelta = worldAxis * frameAxisDelta;
+                                    float frameAxisDelta = glm::dot(frameWorldDelta, m_dragWorldAxis);
+                                    glm::vec3 translationDelta = m_dragWorldAxis * frameAxisDelta;
 
                                     if (glm::length(translationDelta) > 0.0001f) {
                                         TranslateMeshCommand translateCmd(m_selectedMeshIndex, translationDelta);
@@ -586,7 +594,7 @@ namespace slate {
                                 float deltaAngle = (event.motion.xrel - event.motion.yrel) * sensitivity;
 
                                 if (std::abs(deltaAngle) > 0.0001f) {
-                                    glm::quat deltaRot = glm::angleAxis(deltaAngle, worldAxis);
+                                    glm::quat deltaRot = glm::angleAxis(deltaAngle, m_dragWorldAxis);
                                     RotateMeshCommand rotateCmd(m_selectedMeshIndex, deltaRot);
                                     rotateCmd.execute(m_commandContext);
                                 }

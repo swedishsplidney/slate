@@ -36,7 +36,11 @@ namespace slate {
         }
 
         void rotate(const glm::quat& rotation) {
-            m_modelMatrix = m_modelMatrix * glm::mat4_cast(rotation);
+            glm::mat4 translateToCenter = glm::translate(glm::mat4(1.0f), -m_geometricCenter);
+            glm::mat4 rotateMat = glm::mat4_cast(rotation);
+            glm::mat4 translateBack = glm::translate(glm::mat4(1.0f), m_geometricCenter);
+
+            m_modelMatrix = m_modelMatrix * translateBack * rotateMat * translateToCenter;
         }
 
         glm::vec3 getGeometricCenter() const { return m_geometricCenter; }

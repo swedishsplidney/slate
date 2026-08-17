@@ -1,7 +1,10 @@
+#define GLM_ENABLE_EXPERIMENTAL
 #include "translate_commands.hpp"
 #include "renderer/vulkan/vulkan_renderer.hpp"
 #include "ui/ui_manager.hpp"
 #include <iostream>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 
 namespace slate {
 
@@ -13,7 +16,18 @@ namespace slate {
             auto vkRenderer = static_cast<VulkanRenderer*>(context.renderer);
             auto& meshes = vkRenderer->getSceneMeshes();
             if (m_meshIndex < meshes.size() && meshes[m_meshIndex]) {
-                meshes[m_meshIndex]->translate(m_translationDelta);
+                auto& mesh = meshes[m_meshIndex];
+
+                glm::mat4 modelMat = mesh->getModelMatrix();
+                glm::vec3 scale, translation;
+                glm::quat orientation;
+                glm::vec3 skew;
+                glm::vec4 perspective;
+                glm::decompose(modelMat, scale, orientation, translation, skew, perspective);
+
+                glm::vec3 localDelta = glm::inverse(orientation) * m_translationDelta;
+
+                mesh->translate(localDelta);
             }
         }
         if (context.uiManager) {
@@ -27,7 +41,18 @@ namespace slate {
             auto vkRenderer = static_cast<VulkanRenderer*>(context.renderer);
             auto& meshes = vkRenderer->getSceneMeshes();
             if (m_meshIndex < meshes.size() && meshes[m_meshIndex]) {
-                meshes[m_meshIndex]->translate(-m_translationDelta);
+                auto& mesh = meshes[m_meshIndex];
+
+                glm::mat4 modelMat = mesh->getModelMatrix();
+                glm::vec3 scale, translation;
+                glm::quat orientation;
+                glm::vec3 skew;
+                glm::vec4 perspective;
+                glm::decompose(modelMat, scale, orientation, translation, skew, perspective);
+
+                glm::vec3 localDelta = glm::inverse(orientation) * m_translationDelta;
+
+                mesh->translate(-localDelta);
             }
         }
         if (context.uiManager) {

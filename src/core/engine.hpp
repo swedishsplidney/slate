@@ -68,6 +68,8 @@ namespace slate {
 
         glm::vec3 m_gizmoDragStartIntersection{0.0f};
         glm::vec3 m_gizmoLastIntersection{0.0f};
+
+        glm::vec3 m_dragWorldAxis{0.0f};
     };
 
 }

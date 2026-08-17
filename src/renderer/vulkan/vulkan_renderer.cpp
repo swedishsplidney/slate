@@ -917,7 +917,15 @@ namespace slate {
             float t = dist / (dist + 8.0f);
             float gizmoScale = glm::mix(0.05f, 1.0f, t);
 
-            glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            glm::mat4 modelMat = mesh->getModelMatrix();
+            glm::vec3 colX = glm::normalize(glm::vec3(modelMat[0]));
+            glm::vec3 colY = glm::normalize(glm::vec3(modelMat[1]));
+            glm::vec3 colZ = glm::normalize(glm::vec3(modelMat[2]));
+            glm::mat3 meshRot(colX, colY, colZ);
+
+            glm::mat4 assetCorrection = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+            glm::mat4 rotation = glm::mat4(meshRot) * assetCorrection;
 
             glm::mat4 gizmoModelMatrix = glm::translate(glm::mat4(1.0f), gizmoPos) *
                                          rotation *
