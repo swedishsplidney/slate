@@ -22,7 +22,7 @@ namespace slate {
     public:
         FontLoader() = default;
         ~FontLoader() = default;
-        
+
         bool loadFont(const std::string& fontPath, float pixelHeight, int atlasWidth = 512, int atlasHeight = 512);
 
         void generateTextGeometry(

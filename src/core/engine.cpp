@@ -171,6 +171,7 @@ namespace slate {
             glm::vec2(0.0f)
         );
 
+        m_inspectorPanel->setFontLoader(fontLoader);
         m_inspectorPanel->buildDefaultLayout();
         m_inspectorPanel->setDrawsBackground(true);
         m_inspectorPanel->setColor(glm::vec4(0.014f, 0.015f, 0.018f, 0.95f));
