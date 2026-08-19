@@ -8,6 +8,10 @@
 #include "core/commands/editor_commands.hpp"
 #include "core/commands/translate_commands.hpp"
 #include "core/commands/rotate_commands.hpp"
+#include "core/commands/material_commands.hpp"
+#include "core/commands/scale_commands.hpp"
+#include "core/commands/set_position_commands.hpp"
+#include "core/commands/set_rotation_commands.hpp"
 #include "ui/ui_menu_bar.hpp"
 
 #include <stdexcept>
@@ -188,16 +192,13 @@ namespace slate {
             return std::make_unique<ToggleGridCommand>();
         });
 
-        m_commandRegistry->registerCommand("editor.set_gizmo_translate", [](const CommandRegistry::CommandArgs&) {
-            return std::make_unique<SetGizmoModeCommand>(SetGizmoModeCommand::Mode::Translate);
-        });
-
-        m_commandRegistry->registerCommand("editor.set_gizmo_rotate", [](const CommandRegistry::CommandArgs&) {
-            return std::make_unique<SetGizmoModeCommand>(SetGizmoModeCommand::Mode::Rotate);
-        });
-
         m_commandRegistry->registerCommand("editor.undo", [this](const CommandRegistry::CommandArgs&) {
             m_commandRegistry->getHistory().undo(m_commandContext);
+            return nullptr;
+        });
+
+        m_commandRegistry->registerCommand("editor.redo", [this](const CommandRegistry::CommandArgs&) {
+            m_commandRegistry->getHistory().redo(m_commandContext);
             return nullptr;
         });
 
@@ -209,6 +210,53 @@ namespace slate {
         m_commandRegistry->registerCommand("editor.rotate_mesh", [this](const CommandRegistry::CommandArgs& args) {
             glm::quat deltaRot = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
             return std::make_unique<RotateMeshCommand>(m_selectedMeshIndex, deltaRot);
+        });
+
+        m_commandRegistry->registerCommand("editor.set_position", [this](const CommandRegistry::CommandArgs& args) -> std::unique_ptr<ICommand> {
+            glm::vec3 pos(0.0f);
+            if (args.size() >= 3) {
+                pos.x = std::stof(args[0]);
+                pos.y = std::stof(args[1]);
+                pos.z = std::stof(args[2]);
+            }
+            return std::make_unique<SetPositionCommand>(m_selectedMeshIndex, pos);
+        });
+
+        m_commandRegistry->registerCommand("editor.set_scale", [this](const CommandRegistry::CommandArgs& args) -> std::unique_ptr<ICommand> {
+            glm::vec3 scale(1.0f);
+            if (args.size() >= 3) {
+                scale.x = std::stof(args[0]);
+                scale.y = std::stof(args[1]);
+                scale.z = std::stof(args[2]);
+            }
+            return std::make_unique<SetScaleCommand>(m_selectedMeshIndex, scale);
+        });
+
+        m_commandRegistry->registerCommand("editor.set_rotation", [this](const CommandRegistry::CommandArgs& args) -> std::unique_ptr<ICommand> {
+            glm::quat rot(1.0f, 0.0f, 0.0f, 0.0f);
+            if (args.size() >= 4) {
+                rot.w = std::stof(args[0]);
+                rot.x = std::stof(args[1]);
+                rot.y = std::stof(args[2]);
+                rot.z = std::stof(args[3]);
+            }
+            return std::make_unique<SetRotationCommand>(m_selectedMeshIndex, rot);
+        });
+
+        m_commandRegistry->registerCommand("material.update_float", [this](const CommandRegistry::CommandArgs& args) -> std::unique_ptr<ICommand> {
+            if (args.size() < 3) return nullptr;
+            uint32_t matId = static_cast<uint32_t>(std::stoul(args[0]));
+            MaterialPropertyType prop = static_cast<MaterialPropertyType>(std::stoi(args[1]));
+            float val = std::stof(args[2]);
+            return std::make_unique<UpdateMaterialCommand>(m_selectedMeshIndex, matId, prop, val);
+        });
+
+        m_commandRegistry->registerCommand("material.update_vec4", [this](const CommandRegistry::CommandArgs& args) -> std::unique_ptr<ICommand> {
+            if (args.size() < 6) return nullptr;
+            uint32_t matId = static_cast<uint32_t>(std::stoul(args[0]));
+            MaterialPropertyType prop = static_cast<MaterialPropertyType>(std::stoi(args[1]));
+            glm::vec4 val(std::stof(args[2]), std::stof(args[3]), std::stof(args[4]), std::stof(args[5]));
+            return std::make_unique<UpdateMaterialCommand>(m_selectedMeshIndex, matId, prop, val);
         });
     }
 

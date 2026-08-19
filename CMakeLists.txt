@@ -61,6 +61,14 @@ add_executable(slate
         src/core/commands/translate_commands.hpp
         src/core/commands/rotate_commands.cpp
         src/core/commands/rotate_commands.hpp
+        src/core/commands/scale_commands.cpp
+        src/core/commands/scale_commands.hpp
+        src/core/commands/set_position_commands.cpp
+        src/core/commands/set_position_commands.hpp
+        src/core/commands/set_rotation_commands.cpp
+        src/core/commands/set_rotation_commands.hpp
+        src/core/commands/material_commands.cpp
+        src/core/commands/material_commands.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
