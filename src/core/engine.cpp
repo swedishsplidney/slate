@@ -208,6 +208,14 @@ namespace slate {
             return std::make_unique<ToggleGridCommand>();
         });
 
+        m_commandRegistry->registerCommand("editor.set_gizmo_translate", [](const CommandRegistry::CommandArgs&) {
+            return std::make_unique<SetGizmoModeCommand>(SetGizmoModeCommand::Mode::Translate);
+        });
+
+        m_commandRegistry->registerCommand("editor.set_gizmo_rotate", [](const CommandRegistry::CommandArgs&) {
+            return std::make_unique<SetGizmoModeCommand>(SetGizmoModeCommand::Mode::Rotate);
+        });
+
         m_commandRegistry->registerCommand("editor.undo", [this](const CommandRegistry::CommandArgs&) {
             m_commandRegistry->getHistory().undo(m_commandContext);
             return nullptr;
