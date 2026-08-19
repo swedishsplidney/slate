@@ -2,6 +2,7 @@
 
 #include "vertex.hpp"
 #include <vector>
+#include <string>
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -15,10 +16,11 @@ namespace slate {
             const std::vector<Vertex>& vertices,
             const std::vector<uint16_t>& indices,
             uint32_t materialId = 0,
-            bool transparent = false);
+            bool transparent = false,
+            const std::string& name = "Mesh");
+
         ~Mesh();
 
-        // disable copying
         Mesh(const Mesh&) = delete;
         Mesh& operator=(const Mesh&) = delete;
 
@@ -27,6 +29,9 @@ namespace slate {
 
         uint32_t getMaterialId() const { return m_materialId; }
         bool isTransparent() const { return m_transparent; }
+
+        const std::string& getName() const { return m_name; }
+        void setName(const std::string& name) { m_name = name; }
 
         void setModelMatrix(const glm::mat4& matrix) { m_modelMatrix = matrix; }
         const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
@@ -63,6 +68,8 @@ namespace slate {
 
         uint32_t m_materialId = 0;
         bool m_transparent = false;
+
+        std::string m_name;
 
         glm::mat4 m_modelMatrix{1.0f};
         glm::vec3 m_geometricCenter{0.0f};

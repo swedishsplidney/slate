@@ -69,6 +69,7 @@ add_executable(slate
         src/core/commands/set_rotation_commands.hpp
         src/core/commands/material_commands.cpp
         src/core/commands/material_commands.hpp
+        src/ui/ui_inspector_panel.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})

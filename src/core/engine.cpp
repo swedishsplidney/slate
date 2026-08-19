@@ -165,10 +165,25 @@ namespace slate {
         mainDockSpace->addDockedChild(leftPanel, DockSlot::LeftSide, 280.0f);
 
         // right
-        auto rightPanel = std::make_shared<UIElement>("InspectorPanel", glm::vec2(0.0f), glm::vec2(0.0f));
-        rightPanel->setDrawsBackground(true);
-        rightPanel->setColor(glm::vec4(0.014f, 0.015f, 0.018f, 0.95f));
-        mainDockSpace->addDockedChild(rightPanel, DockSlot::RightSide, 320.0f);
+        m_inspectorPanel = std::make_shared<UIInspectorPanel>(
+            "InspectorPanel",
+            glm::vec2(0.0f),
+            glm::vec2(0.0f)
+        );
+
+        m_inspectorPanel->buildDefaultLayout();
+        m_inspectorPanel->setDrawsBackground(true);
+        m_inspectorPanel->setColor(glm::vec4(0.014f, 0.015f, 0.018f, 0.95f));
+
+        m_inspectorPanel->setOnTransformChanged([this](float x, float y, float z) {
+            std::string xStr = std::to_string(x);
+            std::string yStr = std::to_string(y);
+            std::string zStr = std::to_string(z);
+
+            m_commandRegistry->execute("editor.set_position", m_commandContext, {xStr, yStr, zStr});
+        });
+
+        mainDockSpace->addDockedChild(m_inspectorPanel, DockSlot::RightSide, 320.0f);
 
         // viewport
         m_viewportPanel = std::make_shared<UIElement>("ViewportPanel", glm::vec2(0.0f), glm::vec2(0.0f));
@@ -592,6 +607,10 @@ namespace slate {
                             }
 
                             m_selectedMeshIndex = closestMeshIndex;
+
+                            if (m_inspectorPanel && m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size()) {
+                                m_inspectorPanel->setTargetObject(sceneMeshes[m_selectedMeshIndex]->getName());
+                            }
                         }
 
                         m_viewportFocused = clickInsideViewport;

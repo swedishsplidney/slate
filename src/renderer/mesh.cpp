@@ -8,7 +8,8 @@ namespace slate {
            const std::vector<Vertex>& vertices,
            const std::vector<uint16_t>& indices,
            uint32_t materialId,
-           bool transparent)
+           bool transparent,
+           const std::string& name)
     : m_device(device),
       m_vertexCount(static_cast<uint32_t>(vertices.size())),
       m_materialId(materialId),
