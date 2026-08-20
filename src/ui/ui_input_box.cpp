@@ -200,4 +200,9 @@ namespace slate {
         }
     }
 
+    void UIInputBox::setValueWithoutCallback(float value) {
+        m_value = std::clamp(value, m_minValue, m_maxValue);
+        updateTextFromValue();
+    }
+
 }

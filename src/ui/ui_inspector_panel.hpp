@@ -2,6 +2,7 @@
 
 #include "ui/ui_element.hpp"
 #include "ui/ui_button.hpp"
+#include "ui/ui_input_box.hpp"
 #include "resources/font_loader.hpp"
 #include <string>
 #include <memory>
@@ -23,6 +24,8 @@ namespace slate {
         void onEvent(const SDL_Event& event) override;
         void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override;
 
+        void setPositionValues(const glm::vec3& pos);
+
     private:
         void updateChildLayouts();
 
@@ -33,6 +36,8 @@ namespace slate {
         glm::vec3 m_positionValues{0.0f, 0.0f, 0.0f};
         glm::vec3 m_rotationValues{0.0f, 0.0f, 0.0f};
         glm::vec3 m_scaleValues{1.0f, 1.0f, 1.0f};
+
+        std::shared_ptr<UIInputBox> m_posInputBoxes[3];
     };
 
 }

@@ -36,7 +36,7 @@ namespace slate {
         float fieldWidth = (sectionWidth - 65.0f) / 3.0f;
         float startX = 45.0f;
 
-        auto createInputRow = [&](float rowY, float defaultVal, std::function<void(float, int)> callback) {
+        auto createInputRow = [&](float rowY, float defaultVal, std::function<void(float, int)> callback, std::shared_ptr<UIInputBox> outBoxes[]) {
             for (int i = 0; i < 3; ++i) {
                 float fx = startX + (i * (fieldWidth + 4.0f));
                 auto inputBox = std::make_shared<UIInputBox>(
@@ -50,6 +50,10 @@ namespace slate {
                     callback(val, i);
                 });
                 transformSection->addChild(inputBox);
+
+                if (outBoxes) {
+                    outBoxes[i] = inputBox;
+                }
             }
         };
 
@@ -61,13 +65,7 @@ namespace slate {
             if (m_onPositionChanged) {
                 m_onPositionChanged(m_positionValues.x, m_positionValues.y, m_positionValues.z);
             }
-        });
-
-        createInputRow(70.0f, 0.0f, [](float val, int axis) {
-        });
-
-        createInputRow(100.0f, 1.0f, [](float val, int axis) {
-        });
+        }, m_posInputBoxes);
 
         auto resetButton = std::make_shared<UIButton>(
             "ResetButton",
@@ -168,6 +166,13 @@ namespace slate {
             materialSection->setPosition(glm::vec2(8.0f, transformSection->getPosition().y + transformSection->getSize().y + 8.0f));
             materialSection->setSize(glm::vec2(panelWidth - 16.0f, materialSection->getSize().y));
         }
+    }
+
+    void UIInspectorPanel::setPositionValues(const glm::vec3& pos) {
+        m_positionValues = pos;
+        if (m_posInputBoxes[0]) m_posInputBoxes[0]->setValueWithoutCallback(pos.x);
+        if (m_posInputBoxes[1]) m_posInputBoxes[1]->setValueWithoutCallback(pos.y);
+        if (m_posInputBoxes[2]) m_posInputBoxes[2]->setValueWithoutCallback(pos.z);
     }
 
 }

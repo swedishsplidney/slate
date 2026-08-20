@@ -32,6 +32,8 @@ namespace slate {
         void onEvent(const SDL_Event& event) override;
         void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override;
 
+        void setValueWithoutCallback(float value);
+
     private:
         bool m_isNumberMode = true;
         float m_value = 0.0f;

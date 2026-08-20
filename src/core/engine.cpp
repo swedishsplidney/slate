@@ -449,6 +449,23 @@ namespace slate {
         return -1;
     }
 
+    void Engine::setSelectedMeshIndex(int index) {
+        m_selectedMeshIndex = index;
+
+        if (m_inspectorPanel) {
+            auto& sceneMeshes = static_cast<VulkanRenderer*>(m_renderer.get())->getSceneMeshes();
+            if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
+                m_inspectorPanel->setTargetObject(sceneMeshes[m_selectedMeshIndex]->getName());
+
+                glm::vec3 pos = glm::vec3(sceneMeshes[m_selectedMeshIndex]->getModelMatrix()[3]);
+                m_inspectorPanel->setPositionValues(pos);
+            } else {
+                m_inspectorPanel->setTargetObject("None");
+                m_inspectorPanel->setPositionValues(glm::vec3(0.0f));
+            }
+        }
+    }
+
     void Engine::mainLoop() {
         bool shouldClose = false;
         SDL_Event event;
@@ -615,10 +632,21 @@ namespace slate {
                                 }
                             }
 
-                            m_selectedMeshIndex = closestMeshIndex;
+                            setSelectedMeshIndex(closestMeshIndex);
 
-                            if (m_inspectorPanel && m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size()) {
-                                m_inspectorPanel->setTargetObject(sceneMeshes[m_selectedMeshIndex]->getName());
+                            if (m_inspectorPanel) {
+                                auto& sceneMeshes = static_cast<VulkanRenderer*>(m_renderer.get())->getSceneMeshes();
+                                if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
+                                    m_inspectorPanel->setTargetObject(sceneMeshes[m_selectedMeshIndex]->getName());
+
+                                    if (!m_isDraggingGizmo) {
+                                        glm::vec3 currentPos = glm::vec3(sceneMeshes[m_selectedMeshIndex]->getModelMatrix()[3]);
+                                        m_inspectorPanel->setPositionValues(currentPos);
+                                    }
+                                } else {
+                                    m_inspectorPanel->setTargetObject("None");
+                                    m_inspectorPanel->setPositionValues(glm::vec3(0.0f));
+                                }
                             }
                         }
 
@@ -662,6 +690,11 @@ namespace slate {
                                     if (glm::length(translationDelta) > 0.0001f) {
                                         TranslateMeshCommand translateCmd(m_selectedMeshIndex, translationDelta);
                                         translateCmd.execute(m_commandContext);
+
+                                        if (m_inspectorPanel && sceneMeshes[m_selectedMeshIndex]) {
+                                            glm::vec3 currentPos = glm::vec3(sceneMeshes[m_selectedMeshIndex]->getModelMatrix()[3]);
+                                            m_inspectorPanel->setPositionValues(currentPos);
+                                        }
                                     }
                                 }
                             }

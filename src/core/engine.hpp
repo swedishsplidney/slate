@@ -73,6 +73,8 @@ namespace slate {
         glm::vec3 m_dragWorldAxis{0.0f};
 
         std::shared_ptr<UIInspectorPanel> m_inspectorPanel;
+
+        void setSelectedMeshIndex(int index);
     };
 
 }
