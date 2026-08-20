@@ -162,8 +162,8 @@ namespace slate {
         glm::vec4 textColor(0.85f, 0.85f, 0.90f, 1.0f);
         glm::vec4 dimTextColor(0.55f, 0.55f, 0.60f, 1.0f);
 
-        m_fontLoader->generateTextGeometry("Inspector", glm::vec2(headerAbsPos.x + 12.0f, headerAbsPos.y + 18.0f), textColor, vertices, indices);
-        m_fontLoader->generateTextGeometry("Transform", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 20.0f), textColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Inspector", glm::vec2(headerAbsPos.x + 10.0f, headerAbsPos.y + 18.0f), textColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Transform", glm::vec2(transAbsPos.x + 10.0f, transAbsPos.y + 20.0f), textColor, vertices, indices);
 
         m_fontLoader->generateTextGeometry("Position", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 45.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Rotation", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 90.0f), dimTextColor, vertices, indices);
