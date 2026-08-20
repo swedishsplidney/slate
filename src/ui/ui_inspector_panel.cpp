@@ -24,12 +24,12 @@ namespace slate {
 
         auto headerBar = std::make_shared<UIElement>("InspectorHeader", glm::vec2(0.0f, 0.0f), glm::vec2(panelWidth, 28.0f));
         headerBar->setDrawsBackground(false);
-        headerBar->setColor(glm::vec4(0.032f, 0.036f, 0.046f, 1.0f));
+        headerBar->setColor(glm::vec4(0.016f, 0.018f, 0.023f, 1.0f));
         addChild(headerBar);
 
         auto transformSection = std::make_shared<UIElement>("TransformComponent", glm::vec2(8.0f, 36.0f), glm::vec2(panelWidth - 16.0f, 180.0f));
         transformSection->setDrawsBackground(false);
-        transformSection->setColor(glm::vec4(0.016f, 0.018f, 0.023f, 1.0f));
+        transformSection->setColor(glm::vec4(0.008f, 0.009f, 0.012f, 1.0f));
         addChild(transformSection);
 
         float sectionWidth = transformSection->getSize().x;
@@ -57,7 +57,7 @@ namespace slate {
             }
         };
 
-        createInputRow(25.0f, 0.0f, [this](float val, int axis) {
+        createInputRow(50.0f, 0.0f, [this](float val, int axis) {
             if (axis == 0) m_positionValues.x = val;
             else if (axis == 1) m_positionValues.y = val;
             else if (axis == 2) m_positionValues.z = val;
@@ -67,7 +67,7 @@ namespace slate {
             }
         }, m_posInputBoxes);
 
-        createInputRow(55.0f, 0.0f, [this](float val, int axis) {
+        createInputRow(95.0f, 0.0f, [this](float val, int axis) {
             if (axis == 0) m_rotationValues.x = val;
             else if (axis == 1) m_rotationValues.y = val;
             else if (axis == 2) m_rotationValues.z = val;
@@ -77,7 +77,7 @@ namespace slate {
             }
         }, m_rotInputBoxes);
 
-        createInputRow(85.0f, 1.0f, [this](float val, int axis) {
+        createInputRow(140.0f, 1.0f, [this](float val, int axis) {
             if (axis == 0) m_scaleValues.x = val;
             else if (axis == 1) m_scaleValues.y = val;
             else if (axis == 2) m_scaleValues.z = val;
@@ -99,11 +99,11 @@ namespace slate {
         );
         resetButton->setDrawsBackground(true);
         resetButton->setColor(glm::vec4(0.022f, 0.035f, 0.055f, 1.0f));
-        transformSection->addChild(resetButton);
+        // transformSection->addChild(resetButton);
 
         auto materialSection = std::make_shared<UIElement>("MaterialComponent", glm::vec2(8.0f, 224.0f), glm::vec2(panelWidth - 16.0f, 120.0f));
         materialSection->setDrawsBackground(false);
-        materialSection->setColor(glm::vec4(0.016f, 0.018f, 0.023f, 1.0f));
+        materialSection->setColor(glm::vec4(0.008f, 0.009f, 0.012f, 1.0f));
         addChild(materialSection);
     }
 
@@ -163,11 +163,11 @@ namespace slate {
         glm::vec4 dimTextColor(0.55f, 0.55f, 0.60f, 1.0f);
 
         m_fontLoader->generateTextGeometry("Inspector", glm::vec2(headerAbsPos.x + 12.0f, headerAbsPos.y + 18.0f), textColor, vertices, indices);
-        m_fontLoader->generateTextGeometry("Transform", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 16.0f), textColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Transform", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 20.0f), textColor, vertices, indices);
 
-        m_fontLoader->generateTextGeometry("Pos", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 34.0f), dimTextColor, vertices, indices);
-        m_fontLoader->generateTextGeometry("Rot", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 64.0f), dimTextColor, vertices, indices);
-        m_fontLoader->generateTextGeometry("Scl", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 94.0f), dimTextColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Position", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 45.0f), dimTextColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Rotation", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 90.0f), dimTextColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Scale", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 135.0f), dimTextColor, vertices, indices);
 
         m_fontLoader->generateTextGeometry("Materials", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 16.0f), textColor, vertices, indices);
 

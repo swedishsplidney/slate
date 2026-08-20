@@ -159,10 +159,10 @@ namespace slate {
         mainDockSpace->addDockedChild(bottomBar, DockSlot::BottomBar, 25.0f);
 
         // left
-        auto leftPanel = std::make_shared<UIElement>("HierarchyPanel", glm::vec2(0.0f), glm::vec2(0.0f));
+        auto leftPanel = std::make_shared<UIElement>("LeftPanel", glm::vec2(0.0f), glm::vec2(0.0f));
         leftPanel->setDrawsBackground(true);
-        leftPanel->setColor(glm::vec4(0.014f, 0.015f, 0.018f, 0.95f));
-        mainDockSpace->addDockedChild(leftPanel, DockSlot::LeftSide, 280.0f);
+        leftPanel->setColor(glm::vec4(0.004f, 0.005f, 0.008f, 0.1f));
+        mainDockSpace->addDockedChild(leftPanel, DockSlot::LeftSide, 0.0f);
 
         // right
         m_inspectorPanel = std::make_shared<UIInspectorPanel>(
@@ -174,7 +174,7 @@ namespace slate {
         m_inspectorPanel->setFontLoader(fontLoader);
         m_inspectorPanel->buildDefaultLayout();
         m_inspectorPanel->setDrawsBackground(true);
-        m_inspectorPanel->setColor(glm::vec4(0.014f, 0.015f, 0.018f, 0.95f));
+        m_inspectorPanel->setColor(glm::vec4(0.008f, 0.015f, 0.016f, 0.1f));
 
         m_inspectorPanel->setOnPositionChanged([this](float x, float y, float z) {
             m_commandRegistry->execute("editor.set_position", m_commandContext, {
@@ -195,7 +195,7 @@ namespace slate {
             });
         });
 
-        mainDockSpace->addDockedChild(m_inspectorPanel, DockSlot::RightSide, 320.0f);
+        mainDockSpace->addDockedChild(m_inspectorPanel, DockSlot::RightSide, 300.0f);
 
         // viewport
         m_viewportPanel = std::make_shared<UIElement>("ViewportPanel", glm::vec2(0.0f), glm::vec2(0.0f));
