@@ -75,50 +75,31 @@ namespace slate {
         auto transformSection = m_children[1];
         auto materialSection = m_children[2];
 
-        if (headerBar && headerBar->isVisible()) {
-            glm::vec2 cPos = headerBar->getAbsolutePosition();
-            glm::vec2 cSize = headerBar->getSize();
-            glm::vec4 cColor = headerBar->getColor();
-            uint16_t cIdx = static_cast<uint16_t>(vertices.size());
-            vertices.push_back(UIVertex{.pos = cPos, .color = cColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-            indices.push_back(cIdx + 0); indices.push_back(cIdx + 1); indices.push_back(cIdx + 2);
-            indices.push_back(cIdx + 0); indices.push_back(cIdx + 2); indices.push_back(cIdx + 3);
-        }
+        auto drawBox = [&](const std::shared_ptr<UIElement>& element) {
+            if (element && element->isVisible()) {
+                glm::vec2 cPos = element->getAbsolutePosition();
+                glm::vec2 cSize = element->getSize();
+                glm::vec4 cColor = element->getColor();
+                uint16_t cIdx = static_cast<uint16_t>(vertices.size());
+                vertices.push_back(UIVertex{.pos = cPos, .color = cColor, .uv = glm::vec2(-1.0f)});
+                vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y), .color = cColor, .uv = glm::vec2(-1.0f)});
+                vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
+                vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
+                indices.push_back(cIdx + 0); indices.push_back(cIdx + 1); indices.push_back(cIdx + 2);
+                indices.push_back(cIdx + 0); indices.push_back(cIdx + 2); indices.push_back(cIdx + 3);
+            }
+        };
 
-        if (transformSection && transformSection->isVisible()) {
-            glm::vec2 cPos = transformSection->getAbsolutePosition();
-            glm::vec2 cSize = transformSection->getSize();
-            glm::vec4 cColor = transformSection->getColor();
-            uint16_t cIdx = static_cast<uint16_t>(vertices.size());
-            vertices.push_back(UIVertex{.pos = cPos, .color = cColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-            indices.push_back(cIdx + 0); indices.push_back(cIdx + 1); indices.push_back(cIdx + 2);
-            indices.push_back(cIdx + 0); indices.push_back(cIdx + 2); indices.push_back(cIdx + 3);
-        }
-
-        if (materialSection && materialSection->isVisible()) {
-            glm::vec2 cPos = materialSection->getAbsolutePosition();
-            glm::vec2 cSize = materialSection->getSize();
-            glm::vec4 cColor = materialSection->getColor();
-            uint16_t cIdx = static_cast<uint16_t>(vertices.size());
-            vertices.push_back(UIVertex{.pos = cPos, .color = cColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-            indices.push_back(cIdx + 0); indices.push_back(cIdx + 1); indices.push_back(cIdx + 2);
-            indices.push_back(cIdx + 0); indices.push_back(cIdx + 2); indices.push_back(cIdx + 3);
-        }
+        drawBox(headerBar);
+        drawBox(transformSection);
+        drawBox(materialSection);
 
         if (!m_fontLoader) {
             std::cout << "[ui error] inspector panel has no fontloader! text generation skipped.\n";
             return;
         }
 
+        glm::vec2 headerAbsPos = headerBar->getAbsolutePosition();
         glm::vec2 transAbsPos = transformSection->getAbsolutePosition();
         glm::vec2 matAbsPos = materialSection->getAbsolutePosition();
         float sectionWidth = transformSection->getSize().x;
@@ -127,32 +108,40 @@ namespace slate {
         glm::vec4 dimTextColor(0.55f, 0.55f, 0.60f, 1.0f);
         glm::vec4 inputFieldColor(0.032f, 0.036f, 0.046f, 1.0f);
 
+        m_fontLoader->generateTextGeometry("Inspector", glm::vec2(headerAbsPos.x + 12.0f, headerAbsPos.y + 8.0f), textColor, vertices, indices);
+
         m_fontLoader->generateTextGeometry("Transform", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 16.0f), textColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Pos", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 44.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Rot", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 74.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Scl", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 104.0f), dimTextColor, vertices, indices);
 
-        float fieldWidth = (sectionWidth - 65.0f) / 3.0f;
-        float startX = transAbsPos.x + 45.0f;
+        auto generateInputRow = [&](float rowY, const glm::vec3& values) {
+            float fieldWidth = (sectionWidth - 65.0f) / 3.0f;
+            float startX = transAbsPos.x + 45.0f;
 
-        for (int i = 0; i < 3; ++i) {
-            float fx = startX + (i * (fieldWidth + 4.0f));
-            float fy = transAbsPos.y + 40.0f;
+            for (int i = 0; i < 3; ++i) {
+                float fx = startX + (i * (fieldWidth + 4.0f));
+                float fy = rowY;
 
-            uint16_t bIdx = static_cast<uint16_t>(vertices.size());
-            vertices.push_back(UIVertex{.pos = glm::vec2(fx, fy), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(fx + fieldWidth, fy), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(fx + fieldWidth, fy + 22.0f), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(fx, fy + 22.0f), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
+                uint16_t bIdx = static_cast<uint16_t>(vertices.size());
+                vertices.push_back(UIVertex{.pos = glm::vec2(fx, fy), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
+                vertices.push_back(UIVertex{.pos = glm::vec2(fx + fieldWidth, fy), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
+                vertices.push_back(UIVertex{.pos = glm::vec2(fx + fieldWidth, fy + 22.0f), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
+                vertices.push_back(UIVertex{.pos = glm::vec2(fx, fy + 22.0f), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
 
-            indices.push_back(bIdx + 0); indices.push_back(bIdx + 1); indices.push_back(bIdx + 2);
-            indices.push_back(bIdx + 0); indices.push_back(bIdx + 2); indices.push_back(bIdx + 3);
+                indices.push_back(bIdx + 0); indices.push_back(bIdx + 1); indices.push_back(bIdx + 2);
+                indices.push_back(bIdx + 0); indices.push_back(bIdx + 2); indices.push_back(bIdx + 3);
 
-            std::string valStr = (i == 0) ? std::to_string(m_positionValues.x) : (i == 1) ? std::to_string(m_positionValues.y) : std::to_string(m_positionValues.z);
-            if (valStr.length() > 5) valStr = valStr.substr(0, 5);
+                std::string valStr = (i == 0) ? std::to_string(values.x) : (i == 1) ? std::to_string(values.y) : std::to_string(values.z);
+                if (valStr.length() > 5) valStr = valStr.substr(0, 5);
 
-            m_fontLoader->generateTextGeometry(valStr, glm::vec2(fx + 6.0f, fy + 16.0f), textColor, vertices, indices);
-        }
+                m_fontLoader->generateTextGeometry(valStr, glm::vec2(fx + 6.0f, fy + 16.0f), textColor, vertices, indices);
+            }
+        };
+
+        generateInputRow(transAbsPos.y + 40.0f, m_positionValues);
+        generateInputRow(transAbsPos.y + 70.0f, glm::vec3(0.0f));
+        generateInputRow(transAbsPos.y + 100.0f, glm::vec3(1.0f));
 
         m_fontLoader->generateTextGeometry("Materials", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 16.0f), textColor, vertices, indices);
     }
