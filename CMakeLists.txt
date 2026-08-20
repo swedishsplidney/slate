@@ -71,6 +71,8 @@ add_executable(slate
         src/core/commands/material_commands.hpp
         src/ui/ui_inspector_panel.hpp
         src/ui/ui_inspector_panel.cpp
+        src/ui/ui_input_box.cpp
+        src/ui/ui_input_box.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
