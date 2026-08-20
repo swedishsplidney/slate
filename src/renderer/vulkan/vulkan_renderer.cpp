@@ -951,6 +951,20 @@ namespace slate {
 
             vkCmdPushConstants(commandBuffer, m_uiPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &uiProj);
 
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = width;
+            viewport.height = height;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+            VkRect2D scissor{};
+            scissor.offset = {0, 0};
+            scissor.extent = m_swapchainExtent;
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
             VkBuffer vertexBuffers[] = {m_uiVertexBuffer};
             VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);

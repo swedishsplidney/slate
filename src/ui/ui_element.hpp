@@ -33,6 +33,8 @@ namespace slate {
         void setPosition(glm::vec2 position) { m_position = position; }
         virtual void setSize(glm::vec2 size) { m_size = size; }
 
+        glm::vec2 getPosition() const { return m_position; }
+
         glm::vec4 getColor() const { return m_color; }
         void setColor(glm::vec4 color) { m_color = color; }
 
