@@ -83,7 +83,7 @@ foreach(SHADER_FILE ${SHADER_SOURCES})
     add_custom_target(${TARGET_NAME} ALL
             COMMAND ${GLSLC_EXECUTABLE} ${SHADER_FILE} -o ${OUTPUT_SPV}
             DEPENDS ${SHADER_FILE}
-            COMMENT "FORCING SHADER COMPILATION: ${SHADER_NAME} -> ${SHADER_NAME}.spv"
+            COMMENT "compiling shaders: ${SHADER_NAME} -> ${SHADER_NAME}.spv"
     )
 
     add_dependencies(slate ${TARGET_NAME})
