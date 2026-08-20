@@ -106,6 +106,11 @@ namespace slate {
         void setGizmoMode(GizmoMode mode);
         GizmoMode getGizmoMode() const { return m_gizmoMode; }
 
+        void setViewportBounds(glm::vec2 offset, glm::vec2 size) {
+            m_viewportOffset = offset;
+            m_viewportSize = size;
+        }
+
     private:
         void createInstance();
         void createSurface();
@@ -264,6 +269,9 @@ namespace slate {
         void createGizmoPipeline();
 
         size_t m_selectedMeshIndex = 0;
+
+        glm::vec2 m_viewportOffset{0.0f};
+        glm::vec2 m_viewportSize{0.0f};
     };
 
 }

@@ -878,7 +878,10 @@ namespace slate {
         VkRenderPassBeginInfo transparentPassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         transparentPassInfo.renderPass = m_transparentRenderPass;
         transparentPassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
-        transparentPassInfo.renderArea = scissor;
+        VkRect2D fullScreenRect{};
+        fullScreenRect.offset = {0, 0};
+        fullScreenRect.extent = m_swapchainExtent;
+        transparentPassInfo.renderArea = fullScreenRect;
         transparentPassInfo.clearValueCount = 0;
 
         vkCmdBeginRenderPass(commandBuffer, &transparentPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -951,19 +954,19 @@ namespace slate {
 
             vkCmdPushConstants(commandBuffer, m_uiPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &uiProj);
 
-            VkViewport viewport{};
-            viewport.x = 0.0f;
-            viewport.y = 0.0f;
-            viewport.width = width;
-            viewport.height = height;
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            VkViewport uiViewport{};
+            uiViewport.x = 0.0f;
+            uiViewport.y = 0.0f;
+            uiViewport.width = width;
+            uiViewport.height = height;
+            uiViewport.minDepth = 0.0f;
+            uiViewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &uiViewport);
 
-            VkRect2D scissor{};
-            scissor.offset = {0, 0};
-            scissor.extent = m_swapchainExtent;
-            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            VkRect2D uiScissor{};
+            uiScissor.offset = {0, 0};
+            uiScissor.extent = m_swapchainExtent;
+            vkCmdSetScissor(commandBuffer, 0, 1, &uiScissor);
 
             VkBuffer vertexBuffers[] = {m_uiVertexBuffer};
             VkDeviceSize offsets[] = {0};

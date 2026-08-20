@@ -22,8 +22,8 @@
 namespace slate {
 
     Ray Engine::screenPointToRay(glm::vec2 mousePos) {
-        glm::vec2 vpOffset(0.0f);
-        glm::vec2 vpSize(static_cast<float>(m_width), static_cast<float>(m_height));
+        glm::vec2 vpOffset = m_viewportPanel ? m_viewportPanel->getAbsolutePosition() : glm::vec2(0.0f);
+        glm::vec2 vpSize = m_viewportPanel ? m_viewportPanel->getSize() : glm::vec2(static_cast<float>(m_width), static_cast<float>(m_height));
 
         float localX = mousePos.x - vpOffset.x;
         float localY = mousePos.y - vpOffset.y;
@@ -323,8 +323,8 @@ namespace slate {
     }
 
     glm::vec2 Engine::worldToScreen(const glm::vec3& worldPos) {
-        glm::vec2 vpOffset(0.0f);
-        glm::vec2 vpSize(static_cast<float>(m_width), static_cast<float>(m_height));
+        glm::vec2 vpOffset = m_viewportPanel ? m_viewportPanel->getAbsolutePosition() : glm::vec2(0.0f);
+        glm::vec2 vpSize = m_viewportPanel ? m_viewportPanel->getSize() : glm::vec2(static_cast<float>(m_width), static_cast<float>(m_height));
         float aspect = vpSize.x / (vpSize.y > 0.0f ? vpSize.y : 1.0f);
 
         glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 1000.0f);
@@ -357,8 +357,8 @@ namespace slate {
         float t = dist / (dist + 8.0f);
         float gizmoScale = glm::mix(0.05f, 1.0f, t);
 
-        glm::vec2 vpOffset(0.0f);
-        glm::vec2 vpSize(static_cast<float>(m_width), static_cast<float>(m_height));
+        glm::vec2 vpOffset = m_viewportPanel ? m_viewportPanel->getAbsolutePosition() : glm::vec2(0.0f);
+        glm::vec2 vpSize = m_viewportPanel ? m_viewportPanel->getSize() : glm::vec2(static_cast<float>(m_width), static_cast<float>(m_height));
         float aspect = vpSize.x / (vpSize.y > 0.0f ? vpSize.y : 1.0f);
 
         glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 1000.0f);
@@ -771,6 +771,16 @@ namespace slate {
                 m_camera.processKeyboard(keyboardState, deltaTime);
             }
 
+            if (m_viewportPanel) {
+                glm::vec2 vpOffset = m_viewportPanel->getAbsolutePosition();
+                glm::vec2 vpSize = m_viewportPanel->getSize();
+
+                if (vpSize.x > 0.0f && vpSize.y > 0.0f) {
+                    auto vkRenderer = static_cast<VulkanRenderer*>(m_renderer.get());
+                    vkRenderer->setViewportBounds(vpOffset, vpSize);
+                }
+            }
+
             if (m_uiManager && m_uiManager->isDirty()) {
                 m_uiManager->rebuildGeometry();
 
@@ -785,6 +795,11 @@ namespace slate {
 
             glm::vec2 vpOffset(0.0f, 0.0f);
             glm::vec2 vpSize(static_cast<float>(m_width), static_cast<float>(m_height));
+
+            if (m_viewportPanel) {
+                vpOffset = m_viewportPanel->getAbsolutePosition();
+                vpSize = m_viewportPanel->getSize();
+            }
 
             m_renderer->drawFrame(m_camera.getViewMatrix(), vpOffset, vpSize);
         }
