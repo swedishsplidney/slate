@@ -176,12 +176,23 @@ namespace slate {
         m_inspectorPanel->setDrawsBackground(true);
         m_inspectorPanel->setColor(glm::vec4(0.014f, 0.015f, 0.018f, 0.95f));
 
-        m_inspectorPanel->setOnTransformChanged([this](float x, float y, float z) {
-            std::string xStr = std::to_string(x);
-            std::string yStr = std::to_string(y);
-            std::string zStr = std::to_string(z);
+        m_inspectorPanel->setOnPositionChanged([this](float x, float y, float z) {
+            m_commandRegistry->execute("editor.set_position", m_commandContext, {
+                std::to_string(x), std::to_string(y), std::to_string(z)
+            });
+        });
 
-            m_commandRegistry->execute("editor.set_position", m_commandContext, {xStr, yStr, zStr});
+        m_inspectorPanel->setOnRotationChanged([this](float x, float y, float z) {
+            glm::quat q = glm::quat(glm::radians(glm::vec3(x, y, z)));
+            m_commandRegistry->execute("editor.set_rotation", m_commandContext, {
+                std::to_string(q.w), std::to_string(q.x), std::to_string(q.y), std::to_string(q.z)
+            });
+        });
+
+        m_inspectorPanel->setOnScaleChanged([this](float x, float y, float z) {
+            m_commandRegistry->execute("editor.set_scale", m_commandContext, {
+                std::to_string(x), std::to_string(y), std::to_string(z)
+            });
         });
 
         mainDockSpace->addDockedChild(m_inspectorPanel, DockSlot::RightSide, 320.0f);
@@ -455,14 +466,33 @@ namespace slate {
         if (m_inspectorPanel) {
             auto& sceneMeshes = static_cast<VulkanRenderer*>(m_renderer.get())->getSceneMeshes();
             if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
-                m_inspectorPanel->setTargetObject(sceneMeshes[m_selectedMeshIndex]->getName());
+                auto& mesh = sceneMeshes[m_selectedMeshIndex];
+                m_inspectorPanel->setTargetObject(mesh->getName());
 
-                glm::vec3 pos = glm::vec3(sceneMeshes[m_selectedMeshIndex]->getModelMatrix()[3]);
-                m_inspectorPanel->setPositionValues(pos);
+                glm::mat4 modelMat = sceneMeshes[m_selectedMeshIndex]->getModelMatrix();
+                glm::vec3 currentPos = glm::vec3(modelMat[3]);
+                glm::vec3 currentScale(glm::length(modelMat[0]), glm::length(modelMat[1]), glm::length(modelMat[2]));
+
+                glm::mat3 rotMat(
+                    modelMat[0] / (currentScale.x != 0.0f ? currentScale.x : 1.0f),
+                    modelMat[1] / (currentScale.y != 0.0f ? currentScale.y : 1.0f),
+                    modelMat[2] / (currentScale.z != 0.0f ? currentScale.z : 1.0f)
+                );
+                glm::vec3 currentRot = glm::degrees(glm::eulerAngles(glm::quat_cast(rotMat)));
+
+                m_inspectorPanel->setPositionValues(currentPos);
+                m_inspectorPanel->setRotationValues(currentRot);
+                m_inspectorPanel->setScaleValues(currentScale);
             } else {
                 m_inspectorPanel->setTargetObject("None");
                 m_inspectorPanel->setPositionValues(glm::vec3(0.0f));
+                m_inspectorPanel->setRotationValues(glm::vec3(0.0f));
+                m_inspectorPanel->setScaleValues(glm::vec3(1.0f));
             }
+        }
+
+        if (m_uiManager) {
+            m_uiManager->markDirty();
         }
     }
 

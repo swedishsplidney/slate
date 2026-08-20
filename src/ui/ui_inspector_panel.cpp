@@ -57,7 +57,7 @@ namespace slate {
             }
         };
 
-        createInputRow(40.0f, 0.0f, [this](float val, int axis) {
+        createInputRow(25.0f, 0.0f, [this](float val, int axis) {
             if (axis == 0) m_positionValues.x = val;
             else if (axis == 1) m_positionValues.y = val;
             else if (axis == 2) m_positionValues.z = val;
@@ -67,9 +67,29 @@ namespace slate {
             }
         }, m_posInputBoxes);
 
+        createInputRow(55.0f, 0.0f, [this](float val, int axis) {
+            if (axis == 0) m_rotationValues.x = val;
+            else if (axis == 1) m_rotationValues.y = val;
+            else if (axis == 2) m_rotationValues.z = val;
+
+            if (m_onRotationChanged) {
+                m_onRotationChanged(m_rotationValues.x, m_rotationValues.y, m_rotationValues.z);
+            }
+        }, m_rotInputBoxes);
+
+        createInputRow(85.0f, 1.0f, [this](float val, int axis) {
+            if (axis == 0) m_scaleValues.x = val;
+            else if (axis == 1) m_scaleValues.y = val;
+            else if (axis == 2) m_scaleValues.z = val;
+
+            if (m_onScaleChanged) {
+                m_onScaleChanged(m_scaleValues.x, m_scaleValues.y, m_scaleValues.z);
+            }
+        }, m_sclInputBoxes);
+
         auto resetButton = std::make_shared<UIButton>(
             "ResetButton",
-            glm::vec2(10.0f, 145.0f),
+            glm::vec2(10.0f, 130.0f),
             glm::vec2(sectionWidth - 20.0f, 25.0f),
             [this]() {
                 if (m_onPositionChanged) {
@@ -144,9 +164,11 @@ namespace slate {
 
         m_fontLoader->generateTextGeometry("Inspector", glm::vec2(headerAbsPos.x + 12.0f, headerAbsPos.y + 18.0f), textColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Transform", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 16.0f), textColor, vertices, indices);
-        m_fontLoader->generateTextGeometry("Pos", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 44.0f), dimTextColor, vertices, indices);
-        m_fontLoader->generateTextGeometry("Rot", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 74.0f), dimTextColor, vertices, indices);
-        m_fontLoader->generateTextGeometry("Scl", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 104.0f), dimTextColor, vertices, indices);
+
+        m_fontLoader->generateTextGeometry("Pos", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 34.0f), dimTextColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Rot", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 64.0f), dimTextColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Scl", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 94.0f), dimTextColor, vertices, indices);
+
         m_fontLoader->generateTextGeometry("Materials", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 16.0f), textColor, vertices, indices);
 
         transformSection->generateGeometry(vertices, indices);
@@ -173,6 +195,20 @@ namespace slate {
         if (m_posInputBoxes[0]) m_posInputBoxes[0]->setValueWithoutCallback(pos.x);
         if (m_posInputBoxes[1]) m_posInputBoxes[1]->setValueWithoutCallback(pos.y);
         if (m_posInputBoxes[2]) m_posInputBoxes[2]->setValueWithoutCallback(pos.z);
+    }
+
+    void UIInspectorPanel::setRotationValues(const glm::vec3& rot) {
+        m_rotationValues = rot;
+        if (m_rotInputBoxes[0]) m_rotInputBoxes[0]->setValueWithoutCallback(rot.x);
+        if (m_rotInputBoxes[1]) m_rotInputBoxes[1]->setValueWithoutCallback(rot.y);
+        if (m_rotInputBoxes[2]) m_rotInputBoxes[2]->setValueWithoutCallback(rot.z);
+    }
+
+    void UIInspectorPanel::setScaleValues(const glm::vec3& scl) {
+        m_scaleValues = scl;
+        if (m_sclInputBoxes[0]) m_sclInputBoxes[0]->setValueWithoutCallback(scl.x);
+        if (m_sclInputBoxes[1]) m_sclInputBoxes[1]->setValueWithoutCallback(scl.y);
+        if (m_sclInputBoxes[2]) m_sclInputBoxes[2]->setValueWithoutCallback(scl.z);
     }
 
 }
