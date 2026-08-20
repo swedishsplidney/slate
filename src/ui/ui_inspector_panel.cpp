@@ -23,7 +23,7 @@ namespace slate {
         float panelWidth = m_size.x > 0 ? m_size.x : 300.0f;
 
         auto headerBar = std::make_shared<UIElement>("InspectorHeader", glm::vec2(0.0f, 0.0f), glm::vec2(panelWidth, 28.0f));
-        headerBar->setDrawsBackground(true);
+        headerBar->setDrawsBackground(false);
         headerBar->setColor(glm::vec4(0.032f, 0.036f, 0.046f, 1.0f));
         addChild(headerBar);
 
@@ -122,7 +122,7 @@ namespace slate {
                 vertices.push_back(UIVertex{.pos = cPos, .color = cColor, .uv = glm::vec2(-1.0f)});
                 vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y), .color = cColor, .uv = glm::vec2(-1.0f)});
                 vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-                vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
+                vertices.push_back(UIVertex{.pos = glm::vec2(abs(cPos.x), cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
                 indices.push_back(cIdx + 0); indices.push_back(cIdx + 1); indices.push_back(cIdx + 2);
                 indices.push_back(cIdx + 0); indices.push_back(cIdx + 2); indices.push_back(cIdx + 3);
             }
@@ -144,14 +144,15 @@ namespace slate {
         glm::vec4 textColor(0.85f, 0.85f, 0.90f, 1.0f);
         glm::vec4 dimTextColor(0.55f, 0.55f, 0.60f, 1.0f);
 
-        m_fontLoader->generateTextGeometry("Inspector", glm::vec2(headerAbsPos.x + 12.0f, headerAbsPos.y + 8.0f), textColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Inspector", glm::vec2(headerAbsPos.x + 12.0f, headerAbsPos.y + 18.0f), textColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Transform", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 16.0f), textColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Pos", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 44.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Rot", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 74.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Scl", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 104.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Materials", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 16.0f), textColor, vertices, indices);
 
-        UIElement::generateGeometry(vertices, indices);
+        transformSection->generateGeometry(vertices, indices);
+        materialSection->generateGeometry(vertices, indices);
     }
 
     void UIInspectorPanel::updateChildLayouts() {
