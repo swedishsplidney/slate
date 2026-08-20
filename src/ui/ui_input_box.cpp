@@ -68,7 +68,6 @@ namespace slate {
             if (event.button.button == SDL_BUTTON_LEFT) {
                 float mouseX = event.button.x;
                 float mouseY = event.button.y;
-
                 bool inside = (mouseX >= absPos.x && mouseX <= absPos.x + m_size.x &&
                                mouseY >= absPos.y && mouseY <= absPos.y + m_size.y);
 
@@ -80,9 +79,8 @@ namespace slate {
                 } else {
                     if (m_isFocused) {
                         m_isFocused = false;
-                        if (m_isNumberMode) {
-                            updateValueFromText();
-                            updateTextFromValue();
+                        if (SDL_Window* currentWindow = SDL_GetKeyboardFocus()) {
+                            SDL_StopTextInput(currentWindow);
                         }
                     }
                 }
@@ -96,24 +94,50 @@ namespace slate {
                 if (m_totalDragDelta > 2.0f) {
                     float newValue = m_dragStartValue + (deltaX * m_scrubSensitivity);
                     setValue(newValue);
+                    m_hasBeenEdited = true;
                 }
             }
         } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            if (event.button.button == SDL_BUTTON_LEFT && m_isDragging) {
-                m_isDragging = false;
+            if (event.button.button == SDL_BUTTON_LEFT) {
+                if (m_isDragging) {
+                    m_isDragging = false;
+                }
+
                 float mouseX = event.button.x;
                 float mouseY = event.button.y;
                 bool inside = (mouseX >= absPos.x && mouseX <= absPos.x + m_size.x &&
                                mouseY >= absPos.y && mouseY <= absPos.y + m_size.y);
 
                 if (inside && m_totalDragDelta <= 2.0f) {
-                    m_isFocused = true;
+                    if (!m_isFocused) {
+                        m_isFocused = true;
+                        m_hasBeenEdited = false;
+
+                        if (SDL_Window* window = SDL_GetWindowFromID(event.button.windowID)) {
+                            SDL_StartTextInput(window);
+                        }
+                    }
+                } else if (!inside && m_isFocused) {
+                    m_isFocused = false;
+
+                    if (SDL_Window* window = SDL_GetWindowFromID(event.button.windowID)) {
+                        SDL_StopTextInput(window);
+                    }
+                    if (m_isNumberMode) {
+                        updateValueFromText();
+                        updateTextFromValue();
+                    }
                 }
             }
         } else if (m_isFocused) {
             if (event.type == SDL_EVENT_TEXT_INPUT) {
                 const char* inputStr = event.text.text;
                 if (inputStr) {
+                    if (!m_hasBeenEdited) {
+                        m_text.clear();
+                        m_hasBeenEdited = true;
+                    }
+
                     for (int i = 0; inputStr[i] != '\0'; ++i) {
                         char c = inputStr[i];
                         if (m_isNumberMode) {
@@ -129,13 +153,21 @@ namespace slate {
                     if (m_isNumberMode && m_onValueChanged) m_onValueChanged(m_value);
                 }
             } else if (event.type == SDL_EVENT_KEY_DOWN) {
-                if (event.key.key == SDLK_BACKSPACE && !m_text.empty()) {
-                    m_text.pop_back();
+                if (event.key.key == SDLK_BACKSPACE) {
+                    if (!m_hasBeenEdited) {
+                        m_text.clear();
+                        m_hasBeenEdited = true;
+                    } else if (!m_text.empty()) {
+                        m_text.pop_back();
+                    }
                     if (m_isNumberMode) updateValueFromText();
                     if (m_onTextChanged) m_onTextChanged(m_text);
                     if (m_isNumberMode && m_onValueChanged) m_onValueChanged(m_value);
                 } else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER || event.key.key == SDLK_ESCAPE) {
                     m_isFocused = false;
+                    if (SDL_Window* currentWindow = SDL_GetKeyboardFocus()) {
+                        SDL_StopTextInput(currentWindow);
+                    }
                     if (m_isNumberMode) {
                         updateValueFromText();
                         updateTextFromValue();
@@ -163,7 +195,7 @@ namespace slate {
 
         if (m_fontLoader) {
             std::string displayStr = m_text;
-            if (displayStr.length() > 6) displayStr = displayStr.substr(0, 6);
+            if (displayStr.length() > 16) displayStr = displayStr.substr(0, 16);
             m_fontLoader->generateTextGeometry(displayStr, glm::vec2(absPos.x + 6.0f, absPos.y + 16.0f), m_textColor, vertices, indices);
         }
     }

@@ -1,4 +1,5 @@
 #include "ui_inspector_panel.hpp"
+#include "ui/ui_input_box.hpp"
 #include <iostream>
 
 namespace slate {
@@ -31,10 +32,47 @@ namespace slate {
         transformSection->setColor(glm::vec4(0.016f, 0.018f, 0.023f, 1.0f));
         addChild(transformSection);
 
+        float sectionWidth = transformSection->getSize().x;
+        float fieldWidth = (sectionWidth - 65.0f) / 3.0f;
+        float startX = 45.0f;
+
+        auto createInputRow = [&](float rowY, float defaultVal, std::function<void(float, int)> callback) {
+            for (int i = 0; i < 3; ++i) {
+                float fx = startX + (i * (fieldWidth + 4.0f));
+                auto inputBox = std::make_shared<UIInputBox>(
+                    "InputBox_" + std::to_string(i),
+                    glm::vec2(fx, rowY),
+                    glm::vec2(fieldWidth, 22.0f),
+                    defaultVal
+                );
+                inputBox->setFontLoader(m_fontLoader);
+                inputBox->setOnValueChanged([callback, i](float val) {
+                    callback(val, i);
+                });
+                transformSection->addChild(inputBox);
+            }
+        };
+
+        createInputRow(40.0f, 0.0f, [this](float val, int axis) {
+            if (axis == 0) m_positionValues.x = val;
+            else if (axis == 1) m_positionValues.y = val;
+            else if (axis == 2) m_positionValues.z = val;
+
+            if (m_onPositionChanged) {
+                m_onPositionChanged(m_positionValues.x, m_positionValues.y, m_positionValues.z);
+            }
+        });
+
+        createInputRow(70.0f, 0.0f, [](float val, int axis) {
+        });
+
+        createInputRow(100.0f, 1.0f, [](float val, int axis) {
+        });
+
         auto resetButton = std::make_shared<UIButton>(
             "ResetButton",
             glm::vec2(10.0f, 145.0f),
-            glm::vec2(transformSection->getSize().x - 20.0f, 25.0f),
+            glm::vec2(sectionWidth - 20.0f, 25.0f),
             [this]() {
                 if (m_onPositionChanged) {
                     m_onPositionChanged(0.0f, 0.0f, 0.0f);
@@ -102,48 +140,18 @@ namespace slate {
         glm::vec2 headerAbsPos = headerBar->getAbsolutePosition();
         glm::vec2 transAbsPos = transformSection->getAbsolutePosition();
         glm::vec2 matAbsPos = materialSection->getAbsolutePosition();
-        float sectionWidth = transformSection->getSize().x;
 
         glm::vec4 textColor(0.85f, 0.85f, 0.90f, 1.0f);
         glm::vec4 dimTextColor(0.55f, 0.55f, 0.60f, 1.0f);
-        glm::vec4 inputFieldColor(0.032f, 0.036f, 0.046f, 1.0f);
 
         m_fontLoader->generateTextGeometry("Inspector", glm::vec2(headerAbsPos.x + 12.0f, headerAbsPos.y + 8.0f), textColor, vertices, indices);
-
         m_fontLoader->generateTextGeometry("Transform", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 16.0f), textColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Pos", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 44.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Rot", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 74.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Scl", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 104.0f), dimTextColor, vertices, indices);
-
-        auto generateInputRow = [&](float rowY, const glm::vec3& values) {
-            float fieldWidth = (sectionWidth - 65.0f) / 3.0f;
-            float startX = transAbsPos.x + 45.0f;
-
-            for (int i = 0; i < 3; ++i) {
-                float fx = startX + (i * (fieldWidth + 4.0f));
-                float fy = rowY;
-
-                uint16_t bIdx = static_cast<uint16_t>(vertices.size());
-                vertices.push_back(UIVertex{.pos = glm::vec2(fx, fy), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
-                vertices.push_back(UIVertex{.pos = glm::vec2(fx + fieldWidth, fy), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
-                vertices.push_back(UIVertex{.pos = glm::vec2(fx + fieldWidth, fy + 22.0f), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
-                vertices.push_back(UIVertex{.pos = glm::vec2(fx, fy + 22.0f), .color = inputFieldColor, .uv = glm::vec2(-1.0f)});
-
-                indices.push_back(bIdx + 0); indices.push_back(bIdx + 1); indices.push_back(bIdx + 2);
-                indices.push_back(bIdx + 0); indices.push_back(bIdx + 2); indices.push_back(bIdx + 3);
-
-                std::string valStr = (i == 0) ? std::to_string(values.x) : (i == 1) ? std::to_string(values.y) : std::to_string(values.z);
-                if (valStr.length() > 5) valStr = valStr.substr(0, 5);
-
-                m_fontLoader->generateTextGeometry(valStr, glm::vec2(fx + 6.0f, fy + 16.0f), textColor, vertices, indices);
-            }
-        };
-
-        generateInputRow(transAbsPos.y + 40.0f, m_positionValues);
-        generateInputRow(transAbsPos.y + 70.0f, glm::vec3(0.0f));
-        generateInputRow(transAbsPos.y + 100.0f, glm::vec3(1.0f));
-
         m_fontLoader->generateTextGeometry("Materials", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 16.0f), textColor, vertices, indices);
+
+        UIElement::generateGeometry(vertices, indices);
     }
 
     void UIInspectorPanel::updateChildLayouts() {
@@ -158,11 +166,6 @@ namespace slate {
             auto materialSection = m_children[2];
             materialSection->setPosition(glm::vec2(8.0f, transformSection->getPosition().y + transformSection->getSize().y + 8.0f));
             materialSection->setSize(glm::vec2(panelWidth - 16.0f, materialSection->getSize().y));
-
-            auto& innerChildren = transformSection->getChildren();
-            if (!innerChildren.empty()) {
-                innerChildren[0]->setSize(glm::vec2(transformSection->getSize().x - 20.0f, innerChildren[0]->getSize().y));
-            }
         }
     }
 

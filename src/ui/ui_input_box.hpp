@@ -56,6 +56,8 @@ namespace slate {
 
         void updateTextFromValue();
         void updateValueFromText();
+
+        bool m_hasBeenEdited = false;
     };
 
 }
