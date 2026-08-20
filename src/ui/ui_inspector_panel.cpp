@@ -169,7 +169,7 @@ namespace slate {
         m_fontLoader->generateTextGeometry("Rotation", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 90.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Scale", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 135.0f), dimTextColor, vertices, indices);
 
-        m_fontLoader->generateTextGeometry("Materials", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 16.0f), textColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Materials", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 18.0f), textColor, vertices, indices);
 
         transformSection->generateGeometry(vertices, indices);
         materialSection->generateGeometry(vertices, indices);
