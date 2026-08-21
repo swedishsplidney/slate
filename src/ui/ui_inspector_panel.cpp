@@ -10,7 +10,7 @@ namespace slate {
         setColor(glm::vec4(0.13f, 0.14f, 0.18f, 1.0f));
 
         if (m_size.x <= 0.0f || m_size.y <= 0.0f) {
-            m_size = glm::vec2(300.0f, 400.0f);
+            m_size = glm::vec2(300.0f, 500.0f);
         }
     }
 
@@ -26,7 +26,7 @@ namespace slate {
         headerBar->setDrawsBackground(false);
         headerBar->setColor(glm::vec4(0.016f, 0.018f, 0.023f, 1.0f));
         addChild(headerBar);
-
+        
         auto transformSection = std::make_shared<UIElement>("TransformComponent", glm::vec2(8.0f, 36.0f), glm::vec2(panelWidth - 16.0f, 180.0f));
         transformSection->setDrawsBackground(false);
         transformSection->setColor(glm::vec4(0.008f, 0.009f, 0.012f, 1.0f));
@@ -87,24 +87,61 @@ namespace slate {
             }
         }, m_sclInputBoxes);
 
-        auto resetButton = std::make_shared<UIButton>(
-            "ResetButton",
-            glm::vec2(10.0f, 130.0f),
-            glm::vec2(sectionWidth - 20.0f, 25.0f),
-            [this]() {
-                if (m_onPositionChanged) {
-                    m_onPositionChanged(0.0f, 0.0f, 0.0f);
-                }
-            }
-        );
-        resetButton->setDrawsBackground(true);
-        resetButton->setColor(glm::vec4(0.022f, 0.035f, 0.055f, 1.0f));
-        // transformSection->addChild(resetButton);
-
-        auto materialSection = std::make_shared<UIElement>("MaterialComponent", glm::vec2(8.0f, 224.0f), glm::vec2(panelWidth - 16.0f, 120.0f));
+        auto materialSection = std::make_shared<UIElement>("MaterialComponent", glm::vec2(8.0f, 224.0f), glm::vec2(panelWidth - 16.0f, 130.0f));
         materialSection->setDrawsBackground(false);
         materialSection->setColor(glm::vec4(0.008f, 0.009f, 0.012f, 1.0f));
         addChild(materialSection);
+
+        auto createMatInputRow = [&](float rowY, float defaultVal, std::function<void(float, int)> callback, std::shared_ptr<UIInputBox> outBoxes[]) {
+            for (int i = 0; i < 3; ++i) {
+                float fx = startX + (i * (fieldWidth + 4.0f));
+                auto inputBox = std::make_shared<UIInputBox>(
+                    "MatInputBox_" + std::to_string(i),
+                    glm::vec2(fx, rowY),
+                    glm::vec2(fieldWidth, 22.0f),
+                    defaultVal
+                );
+                inputBox->setFontLoader(m_fontLoader);
+                inputBox->setOnValueChanged([callback, i](float val) {
+                    callback(val, i);
+                });
+                materialSection->addChild(inputBox);
+
+                if (outBoxes) {
+                    outBoxes[i] = inputBox;
+                }
+            }
+        };
+
+        createMatInputRow(45.0f, 1.0f, [this](float val, int idx) {
+            if (idx == 0) m_materialColorValues.r = val;
+            else if (idx == 1) m_materialColorValues.g = val;
+            else if (idx == 2) m_materialColorValues.b = val;
+            m_materialColorValues.a = 1.0f;
+
+            if (m_onMaterialVec4Changed) {
+                m_onMaterialVec4Changed(0, m_materialColorValues);
+            }
+        }, m_matColorInputBoxes);
+
+        for (int i = 0; i < 2; ++i) {
+            float fx = startX + (i * (fieldWidth + 4.0f));
+            auto inputBox = std::make_shared<UIInputBox>(
+                "MatFloatBox_" + std::to_string(i),
+                glm::vec2(fx, 90.0f),
+                glm::vec2(fieldWidth, 22.0f),
+                i == 0 ? 0.5f : 0.0f
+            );
+            inputBox->setFontLoader(m_fontLoader);
+            inputBox->setOnValueChanged([this, i](float val) {
+                m_materialFloatValues[i] = val;
+                if (m_onMaterialFloatChanged) {
+                    m_onMaterialFloatChanged(i + 1, val);
+                }
+            });
+            materialSection->addChild(inputBox);
+            m_matFloatInputBoxes[i] = inputBox;
+        }
     }
 
     void UIInspectorPanel::onEvent(const SDL_Event& event) {
@@ -140,7 +177,7 @@ namespace slate {
                 vertices.push_back(UIVertex{.pos = cPos, .color = cColor, .uv = glm::vec2(-1.0f)});
                 vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y), .color = cColor, .uv = glm::vec2(-1.0f)});
                 vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
-                vertices.push_back(UIVertex{.pos = glm::vec2(abs(cPos.x), cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
+                vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
                 indices.push_back(cIdx + 0); indices.push_back(cIdx + 1); indices.push_back(cIdx + 2);
                 indices.push_back(cIdx + 0); indices.push_back(cIdx + 2); indices.push_back(cIdx + 3);
             }
@@ -169,7 +206,9 @@ namespace slate {
         m_fontLoader->generateTextGeometry("Rotation", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 90.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Scale", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 135.0f), dimTextColor, vertices, indices);
 
-        m_fontLoader->generateTextGeometry("Materials", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 18.0f), textColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Material", glm::vec2(matAbsPos.x + 10.0f, matAbsPos.y + 20.0f), textColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Color", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 45.0f), dimTextColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Rough/Met", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 90.0f), dimTextColor, vertices, indices);
 
         transformSection->generateGeometry(vertices, indices);
         materialSection->generateGeometry(vertices, indices);
@@ -209,6 +248,22 @@ namespace slate {
         if (m_sclInputBoxes[0]) m_sclInputBoxes[0]->setValueWithoutCallback(scl.x);
         if (m_sclInputBoxes[1]) m_sclInputBoxes[1]->setValueWithoutCallback(scl.y);
         if (m_sclInputBoxes[2]) m_sclInputBoxes[2]->setValueWithoutCallback(scl.z);
+    }
+
+    void UIInspectorPanel::setMaterialColorValues(const glm::vec4& color) {
+        m_materialColorValues = color;
+        if (m_matColorInputBoxes[0]) m_matColorInputBoxes[0]->setValueWithoutCallback(color.r);
+        if (m_matColorInputBoxes[1]) m_matColorInputBoxes[1]->setValueWithoutCallback(color.g);
+        if (m_matColorInputBoxes[2]) m_matColorInputBoxes[2]->setValueWithoutCallback(color.b);
+    }
+
+    void UIInspectorPanel::setMaterialFloatValue(int index, float val) {
+        if (index >= 0 && index < 2) {
+            m_materialFloatValues[index] = val;
+            if (m_matFloatInputBoxes[index]) {
+                m_matFloatInputBoxes[index]->setValueWithoutCallback(val);
+            }
+        }
     }
 
 }

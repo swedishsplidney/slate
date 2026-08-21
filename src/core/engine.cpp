@@ -195,6 +195,25 @@ namespace slate {
             });
         });
 
+        m_inspectorPanel->setOnMaterialVec4Changed([this](int materialId, const glm::vec4& color) {
+            m_commandRegistry->execute("material.update_vec4", m_commandContext, {
+                std::to_string(materialId),
+                "0",
+                std::to_string(color.r),
+                std::to_string(color.g),
+                std::to_string(color.b),
+                std::to_string(color.a)
+            });
+        });
+
+        m_inspectorPanel->setOnMaterialFloatChanged([this](int propertyType, float val) {
+            m_commandRegistry->execute("material.update_float", m_commandContext, {
+                "0",
+                std::to_string(propertyType),
+                std::to_string(val)
+            });
+        });
+
         mainDockSpace->addDockedChild(m_inspectorPanel, DockSlot::RightSide, 300.0f);
 
         // viewport
