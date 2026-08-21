@@ -122,7 +122,7 @@ namespace slate {
             }
         };
 
-        createMatInputRow(45.0f, 1.0f, [this](float val, int idx) {
+        createMatInputRow(50.0f, 1.0f, [this](float val, int idx) {
             if (idx == 0) m_materialColorValues.r = val;
             else if (idx == 1) m_materialColorValues.g = val;
             else if (idx == 2) m_materialColorValues.b = val;
