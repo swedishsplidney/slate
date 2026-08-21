@@ -26,7 +26,7 @@ namespace slate {
         headerBar->setDrawsBackground(false);
         headerBar->setColor(glm::vec4(0.016f, 0.018f, 0.023f, 1.0f));
         addChild(headerBar);
-        
+
         auto transformSection = std::make_shared<UIElement>("TransformComponent", glm::vec2(8.0f, 36.0f), glm::vec2(panelWidth - 16.0f, 180.0f));
         transformSection->setDrawsBackground(false);
         transformSection->setColor(glm::vec4(0.008f, 0.009f, 0.012f, 1.0f));
@@ -113,7 +113,7 @@ namespace slate {
             }
         };
 
-        createMatInputRow(45.0f, 1.0f, [this](float val, int idx) {
+        createMatInputRow(50.0f, 1.0f, [this](float val, int idx) {
             if (idx == 0) m_materialColorValues.r = val;
             else if (idx == 1) m_materialColorValues.g = val;
             else if (idx == 2) m_materialColorValues.b = val;
@@ -128,7 +128,7 @@ namespace slate {
             float fx = startX + (i * (fieldWidth + 4.0f));
             auto inputBox = std::make_shared<UIInputBox>(
                 "MatFloatBox_" + std::to_string(i),
-                glm::vec2(fx, 90.0f),
+                glm::vec2(fx, 95.0f),
                 glm::vec2(fieldWidth, 22.0f),
                 i == 0 ? 0.5f : 0.0f
             );
@@ -208,7 +208,7 @@ namespace slate {
 
         m_fontLoader->generateTextGeometry("Material", glm::vec2(matAbsPos.x + 10.0f, matAbsPos.y + 20.0f), textColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Color", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 45.0f), dimTextColor, vertices, indices);
-        m_fontLoader->generateTextGeometry("Rough/Met", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 90.0f), dimTextColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Roughness / Metallic", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 90.0f), dimTextColor, vertices, indices);
 
         transformSection->generateGeometry(vertices, indices);
         materialSection->generateGeometry(vertices, indices);
