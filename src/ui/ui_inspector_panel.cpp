@@ -11,7 +11,7 @@ namespace slate {
         setColor(glm::vec4(0.13f, 0.14f, 0.18f, 1.0f));
 
         if (m_size.x <= 0.0f || m_size.y <= 0.0f) {
-            m_size = glm::vec2(300.0f, 540.0f);
+            m_size = glm::vec2(300.0f, 620.0f);
         }
     }
 
@@ -88,7 +88,7 @@ namespace slate {
             }
         }, m_sclInputBoxes);
 
-        auto materialSection = std::make_shared<UIElement>("MaterialComponent", glm::vec2(8.0f, 224.0f), glm::vec2(panelWidth - 16.0f, 160.0f));
+        auto materialSection = std::make_shared<UIElement>("MaterialComponent", glm::vec2(8.0f, 224.0f), glm::vec2(panelWidth - 16.0f, 240.0f));
         materialSection->setDrawsBackground(false);
         materialSection->setColor(glm::vec4(0.008f, 0.009f, 0.012f, 1.0f));
         addChild(materialSection);
@@ -122,7 +122,7 @@ namespace slate {
             }
         };
 
-        createMatInputRow(50.0f, 1.0f, [this](float val, int idx) {
+        createMatInputRow(45.0f, 1.0f, [this](float val, int idx) {
             if (idx == 0) m_materialColorValues.r = val;
             else if (idx == 1) m_materialColorValues.g = val;
             else if (idx == 2) m_materialColorValues.b = val;
@@ -136,10 +136,10 @@ namespace slate {
         float fullFieldX = 90.0f;
         float fullFieldWidth = sectionWidth - 98.0f;
 
-        float floatRowY[2] = { 90.0f, 130.0f };
-        float defaultFloatVals[2] = { 0.5f, 0.0f };
+        float floatRowY[4] = { 90.0f, 130.0f, 170.0f, 210.0f };
+        float defaultFloatVals[4] = { 0.5f, 0.0f, 1.5f, 0.0f };
 
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 4; ++i) {
             auto inputBox = std::make_shared<UIInputBox>(
                 "MatFloatBox_" + std::to_string(i),
                 glm::vec2(fullFieldX, floatRowY[i]),
@@ -150,12 +150,19 @@ namespace slate {
 
             std::weak_ptr<UIInputBox> weakBox = inputBox;
             inputBox->setOnValueChanged([this, i, weakBox](float val) {
-                float clamped = std::clamp(val, 0.0f, 1.0f);
+                float clamped = val;
+                if (i == 0 || i == 1 || i == 3) {
+                    clamped = std::clamp(val, 0.0f, 1.0f);
+                } else if (i == 2) {
+                    clamped = std::max(1.0f, val);
+                }
+
                 if (clamped != val) {
                     if (auto box = weakBox.lock()) {
                         box->setValueWithoutCallback(clamped);
                     }
                 }
+
                 m_materialFloatValues[i] = clamped;
                 if (m_onMaterialFloatChanged) {
                     m_onMaterialFloatChanged(i + 1, clamped);
@@ -232,6 +239,8 @@ namespace slate {
         m_fontLoader->generateTextGeometry("Color", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 45.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Roughness", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 90.0f), dimTextColor, vertices, indices);
         m_fontLoader->generateTextGeometry("Metallic", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 130.0f), dimTextColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("IOR", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 170.0f), dimTextColor, vertices, indices);
+        m_fontLoader->generateTextGeometry("Transmission", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 210.0f), dimTextColor, vertices, indices);
 
         transformSection->generateGeometry(vertices, indices);
         materialSection->generateGeometry(vertices, indices);
@@ -281,7 +290,7 @@ namespace slate {
     }
 
     void UIInspectorPanel::setMaterialFloatValue(int index, float val) {
-        if (index >= 0 && index < 2) {
+        if (index >= 0 && index < 4) {
             m_materialFloatValues[index] = val;
             if (m_matFloatInputBoxes[index]) {
                 m_matFloatInputBoxes[index]->setValueWithoutCallback(val);
