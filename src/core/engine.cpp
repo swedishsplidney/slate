@@ -488,7 +488,8 @@ namespace slate {
                 auto& mesh = sceneMeshes[m_selectedMeshIndex];
                 m_inspectorPanel->setTargetObject(mesh->getName());
 
-                glm::mat4 modelMat = sceneMeshes[m_selectedMeshIndex]->getModelMatrix();
+                // --- Transform Sync ---
+                glm::mat4 modelMat = mesh->getModelMatrix();
                 glm::vec3 currentPos = glm::vec3(modelMat[3]);
                 glm::vec3 currentScale(glm::length(modelMat[0]), glm::length(modelMat[1]), glm::length(modelMat[2]));
 
@@ -502,11 +503,32 @@ namespace slate {
                 m_inspectorPanel->setPositionValues(currentPos);
                 m_inspectorPanel->setRotationValues(currentRot);
                 m_inspectorPanel->setScaleValues(currentScale);
+
+                // --- Material Sync ---
+                uint32_t materialId = mesh->getMaterialId();
+                // If your renderer manages materials by ID, retrieve and apply them here, e.g.:
+                // auto material = static_cast<VulkanRenderer*>(m_renderer.get())->getMaterial(materialId);
+                // if (material) {
+                //     m_inspectorPanel->setMaterialColorValues(material->getColor());
+                //     m_inspectorPanel->setMaterialFloatValue(0, material->getRoughness());
+                //     m_inspectorPanel->setMaterialFloatValue(1, material->getMetallic());
+                //     m_inspectorPanel->setMaterialFloatValue(2, material->getIOR());
+                //     m_inspectorPanel->setMaterialFloatValue(3, material->getTransmission());
+                // }
+
             } else {
+                // --- Reset When Nothing is Selected ---
                 m_inspectorPanel->setTargetObject("None");
                 m_inspectorPanel->setPositionValues(glm::vec3(0.0f));
                 m_inspectorPanel->setRotationValues(glm::vec3(0.0f));
                 m_inspectorPanel->setScaleValues(glm::vec3(1.0f));
+
+                // Reset material UI to default fallback values
+                m_inspectorPanel->setMaterialColorValues(glm::vec4(1.0f));
+                m_inspectorPanel->setMaterialFloatValue(0, 0.5f); // Roughness
+                m_inspectorPanel->setMaterialFloatValue(1, 0.0f); // Metallic
+                m_inspectorPanel->setMaterialFloatValue(2, 1.5f); // IOR
+                m_inspectorPanel->setMaterialFloatValue(3, 0.0f); // Transmission
             }
         }
 

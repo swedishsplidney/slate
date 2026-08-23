@@ -43,14 +43,14 @@ namespace slate {
         glm::vec3 m_rotationValues{0.0f};
         glm::vec3 m_scaleValues{1.0f};
         glm::vec4 m_materialColorValues{1.0f};
-        float m_materialFloatValues[2]{0.5f, 0.0f};
+        float m_materialFloatValues[4]{0.5f, 0.0f, 1.5f, 0.0f};
 
         std::shared_ptr<UIInputBox> m_posInputBoxes[3];
         std::shared_ptr<UIInputBox> m_rotInputBoxes[3];
         std::shared_ptr<UIInputBox> m_sclInputBoxes[3];
 
         std::shared_ptr<UIInputBox> m_matColorInputBoxes[3];
-        std::shared_ptr<UIInputBox> m_matFloatInputBoxes[2];
+        std::shared_ptr<UIInputBox> m_matFloatInputBoxes[4];
 
         std::function<void(float, float, float)> m_onPositionChanged;
         std::function<void(float, float, float)> m_onRotationChanged;
