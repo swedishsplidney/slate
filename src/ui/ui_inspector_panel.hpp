@@ -26,6 +26,12 @@ namespace slate {
 
         void setMaterialColorValues(const glm::vec4& color);
         void setMaterialFloatValue(int index, float val);
+        float getMaterialFloatValue(int index) const {
+            if (index >= 0 && index < 4) {
+                return m_materialFloatValues[index];
+            }
+            return 0.0f;
+        }
 
         void setOnPositionChanged(std::function<void(float, float, float)> cb) { m_onPositionChanged = cb; }
         void setOnRotationChanged(std::function<void(float, float, float)> cb) { m_onRotationChanged = cb; }

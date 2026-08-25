@@ -53,6 +53,8 @@ namespace slate {
         const std::vector<Vertex>& getVertices() const { return m_vertices; }
         const std::vector<uint16_t>& getIndices() const { return m_indices; }
 
+        void setTransparent(bool transparent) { m_transparent = transparent; }
+
     private:
         void createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices);
         void createIndexBuffer(VkPhysicalDevice physicalDevice, const std::vector<uint16_t>& indices);

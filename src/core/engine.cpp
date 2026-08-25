@@ -212,6 +212,17 @@ namespace slate {
                 std::to_string(propertyType),
                 std::to_string(val)
             });
+
+            if (propertyType == 3) {
+                auto renderer = static_cast<VulkanRenderer*>(m_renderer.get());
+                if (renderer) {
+                    auto& sceneMeshes = renderer->getSceneMeshes();
+                    if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
+                        auto& mesh = sceneMeshes[m_selectedMeshIndex];
+                        mesh->setTransparent(val > 0.0f);
+                    }
+                }
+            }
         });
 
         mainDockSpace->addDockedChild(m_inspectorPanel, DockSlot::RightSide, 300.0f);
@@ -483,7 +494,9 @@ namespace slate {
         m_selectedMeshIndex = index;
 
         if (m_inspectorPanel) {
-            auto& sceneMeshes = static_cast<VulkanRenderer*>(m_renderer.get())->getSceneMeshes();
+            auto renderer = static_cast<VulkanRenderer*>(m_renderer.get());
+            auto& sceneMeshes = renderer->getSceneMeshes();
+
             if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
                 auto& mesh = sceneMeshes[m_selectedMeshIndex];
                 m_inspectorPanel->setTargetObject(mesh->getName());
@@ -504,6 +517,14 @@ namespace slate {
                 m_inspectorPanel->setScaleValues(currentScale);
 
                 uint32_t materialId = mesh->getMaterialId();
+                auto& material = renderer->getGlobalMaterials()[materialId];
+
+                m_inspectorPanel->setMaterialColorValues(material.gpuData.albedoFactor);
+                m_inspectorPanel->setMaterialFloatValue(0, material.gpuData.roughnessFactor);
+                m_inspectorPanel->setMaterialFloatValue(1, material.gpuData.metallicFactor);
+                m_inspectorPanel->setMaterialFloatValue(2, material.gpuData.ior);
+                m_inspectorPanel->setMaterialFloatValue(3, material.gpuData.transmissionFactor);
+
             } else {
                 m_inspectorPanel->setTargetObject("None");
                 m_inspectorPanel->setPositionValues(glm::vec3(0.0f));
