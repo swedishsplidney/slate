@@ -47,7 +47,9 @@ namespace slate {
                     defaultVal
                 );
                 inputBox->setFontLoader(m_fontLoader);
-                inputBox->setOnValueChanged([callback, i](float val) {
+
+                std::weak_ptr<UIInputBox> weakBox = inputBox;
+                inputBox->setOnValueChanged([callback, i, weakBox](float val) {
                     callback(val, i);
                 });
                 transformSection->addChild(inputBox);
@@ -58,7 +60,7 @@ namespace slate {
             }
         };
 
-        createInputRow(50.0f, 0.0f, [this](float val, int axis) {
+        createInputRow(45.0f, 0.0f, [this](float val, int axis) {
             if (axis == 0) m_positionValues.x = val;
             else if (axis == 1) m_positionValues.y = val;
             else if (axis == 2) m_positionValues.z = val;
@@ -68,7 +70,7 @@ namespace slate {
             }
         }, m_posInputBoxes);
 
-        createInputRow(95.0f, 0.0f, [this](float val, int axis) {
+        createInputRow(90.0f, 0.0f, [this](float val, int axis) {
             if (axis == 0) m_rotationValues.x = val;
             else if (axis == 1) m_rotationValues.y = val;
             else if (axis == 2) m_rotationValues.z = val;
@@ -78,7 +80,7 @@ namespace slate {
             }
         }, m_rotInputBoxes);
 
-        createInputRow(140.0f, 1.0f, [this](float val, int axis) {
+        createInputRow(135.0f, 1.0f, [this](float val, int axis) {
             if (axis == 0) m_scaleValues.x = val;
             else if (axis == 1) m_scaleValues.y = val;
             else if (axis == 2) m_scaleValues.z = val;
@@ -164,8 +166,17 @@ namespace slate {
                 }
 
                 m_materialFloatValues[i] = clamped;
+
+                int gpuIndex = i;
+                switch (i) {
+                    case 0: gpuIndex = 1; break;
+                    case 1: gpuIndex = 2; break;
+                    case 2: gpuIndex = 0; break;
+                    case 3: gpuIndex = 3; break;
+                }
+
                 if (m_onMaterialFloatChanged) {
-                    m_onMaterialFloatChanged(i + 1, clamped);
+                    m_onMaterialFloatChanged(gpuIndex, clamped);
                 }
             });
             materialSection->addChild(inputBox);
@@ -289,12 +300,31 @@ namespace slate {
         if (m_matColorInputBoxes[2]) m_matColorInputBoxes[2]->setValueWithoutCallback(color.b);
     }
 
-    void UIInspectorPanel::setMaterialFloatValue(int index, float val) {
-        if (index >= 0 && index < 4) {
-            m_materialFloatValues[index] = val;
-            if (m_matFloatInputBoxes[index]) {
-                m_matFloatInputBoxes[index]->setValueWithoutCallback(val);
-            }
+    void UIInspectorPanel::setRoughness(float val) {
+        m_materialFloatValues[0] = val;
+        if (m_matFloatInputBoxes[0]) {
+            m_matFloatInputBoxes[0]->setValueWithoutCallback(val);
+        }
+    }
+
+    void UIInspectorPanel::setMetallic(float val) {
+        m_materialFloatValues[1] = val;
+        if (m_matFloatInputBoxes[1]) {
+            m_matFloatInputBoxes[1]->setValueWithoutCallback(val);
+        }
+    }
+
+    void UIInspectorPanel::setIOR(float val) {
+        m_materialFloatValues[2] = val;
+        if (m_matFloatInputBoxes[2]) {
+            m_matFloatInputBoxes[2]->setValueWithoutCallback(val);
+        }
+    }
+
+    void UIInspectorPanel::setTransmission(float val) {
+        m_materialFloatValues[3] = val;
+        if (m_matFloatInputBoxes[3]) {
+            m_matFloatInputBoxes[3]->setValueWithoutCallback(val);
         }
     }
 

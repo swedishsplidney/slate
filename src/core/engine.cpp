@@ -195,10 +195,19 @@ namespace slate {
             });
         });
 
-        m_inspectorPanel->setOnMaterialVec4Changed([this](int materialId, const glm::vec4& color) {
+        m_inspectorPanel->setOnMaterialVec4Changed([this](int propertyType, const glm::vec4& color) {
+            auto renderer = static_cast<VulkanRenderer*>(m_renderer.get());
+            uint32_t materialId = 0;
+            if (renderer) {
+                auto& sceneMeshes = renderer->getSceneMeshes();
+                if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
+                    materialId = sceneMeshes[m_selectedMeshIndex]->getMaterialId();
+                }
+            }
+
             m_commandRegistry->execute("material.update_vec4", m_commandContext, {
                 std::to_string(materialId),
-                "0",
+                std::to_string(propertyType),
                 std::to_string(color.r),
                 std::to_string(color.g),
                 std::to_string(color.b),
@@ -207,14 +216,22 @@ namespace slate {
         });
 
         m_inspectorPanel->setOnMaterialFloatChanged([this](int propertyType, float val) {
+            auto renderer = static_cast<VulkanRenderer*>(m_renderer.get());
+            uint32_t materialId = 0;
+            if (renderer) {
+                auto& sceneMeshes = renderer->getSceneMeshes();
+                if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
+                    materialId = sceneMeshes[m_selectedMeshIndex]->getMaterialId();
+                }
+            }
+
             m_commandRegistry->execute("material.update_float", m_commandContext, {
-                "0",
+                std::to_string(materialId),
                 std::to_string(propertyType),
                 std::to_string(val)
             });
 
             if (propertyType == 3) {
-                auto renderer = static_cast<VulkanRenderer*>(m_renderer.get());
                 if (renderer) {
                     auto& sceneMeshes = renderer->getSceneMeshes();
                     if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() && sceneMeshes[m_selectedMeshIndex]) {
@@ -520,10 +537,10 @@ namespace slate {
                 auto& material = renderer->getGlobalMaterials()[materialId];
 
                 m_inspectorPanel->setMaterialColorValues(material.gpuData.albedoFactor);
-                m_inspectorPanel->setMaterialFloatValue(0, material.gpuData.roughnessFactor);
-                m_inspectorPanel->setMaterialFloatValue(1, material.gpuData.metallicFactor);
-                m_inspectorPanel->setMaterialFloatValue(2, material.gpuData.ior);
-                m_inspectorPanel->setMaterialFloatValue(3, material.gpuData.transmissionFactor);
+                m_inspectorPanel->setRoughness(material.gpuData.roughnessFactor);
+                m_inspectorPanel->setMetallic(material.gpuData.metallicFactor);
+                m_inspectorPanel->setTransmission(material.gpuData.transmissionFactor);
+                m_inspectorPanel->setIOR(material.gpuData.ior);
 
             } else {
                 m_inspectorPanel->setTargetObject("None");
@@ -532,10 +549,10 @@ namespace slate {
                 m_inspectorPanel->setScaleValues(glm::vec3(1.0f));
 
                 m_inspectorPanel->setMaterialColorValues(glm::vec4(1.0f));
-                m_inspectorPanel->setMaterialFloatValue(0, 0.5f);
-                m_inspectorPanel->setMaterialFloatValue(1, 0.0f);
-                m_inspectorPanel->setMaterialFloatValue(2, 1.5f);
-                m_inspectorPanel->setMaterialFloatValue(3, 0.0f);
+                m_inspectorPanel->setRoughness(0.5f);
+                m_inspectorPanel->setMetallic(0.0f);
+                m_inspectorPanel->setTransmission(0.0f);
+                m_inspectorPanel->setIOR(1.5f);
             }
         }
 

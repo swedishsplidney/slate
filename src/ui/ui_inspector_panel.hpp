@@ -25,7 +25,12 @@ namespace slate {
         void setScaleValues(const glm::vec3& scl);
 
         void setMaterialColorValues(const glm::vec4& color);
-        void setMaterialFloatValue(int index, float val);
+
+        void setRoughness(float val);
+        void setMetallic(float val);
+        void setIOR(float val);
+        void setTransmission(float val);
+
         float getMaterialFloatValue(int index) const {
             if (index >= 0 && index < 4) {
                 return m_materialFloatValues[index];
