@@ -171,7 +171,7 @@ namespace slate {
                 switch (i) {
                     case 0: gpuIndex = 1; break;
                     case 1: gpuIndex = 2; break;
-                    case 2: gpuIndex = 0; break;
+                    case 2: gpuIndex = 4; break;
                     case 3: gpuIndex = 3; break;
                 }
 
