@@ -11,7 +11,7 @@ namespace slate {
         setColor(glm::vec4(0.13f, 0.14f, 0.18f, 1.0f));
 
         if (m_size.x <= 0.0f || m_size.y <= 0.0f) {
-            m_size = glm::vec2(300.0f, 620.0f);
+            m_size = glm::vec2(300.0f, 680.0f);
         }
     }
 
@@ -32,17 +32,19 @@ namespace slate {
         auto transformDropdown = std::make_shared<UIDropdown>(
             "TransformDropdown",
             glm::vec2(8.0f, 36.0f),
-            glm::vec2(panelWidth - 16.0f, 160.0f),
+            glm::vec2(panelWidth - 16.0f, 190.0f),
             "Transform",
             true
         );
         transformDropdown->setFontLoader(m_fontLoader);
+        transformDropdown->setDrawsBackground(true);
+        transformDropdown->setColor(glm::vec4(0.10f, 0.11f, 0.15f, 1.0f));
         transformDropdown->setOnToggle([this](bool) { updateChildLayouts(); });
         addChild(transformDropdown);
 
         float sectionWidth = transformDropdown->getSize().x;
-        float fieldWidth = (sectionWidth - 65.0f) / 3.0f;
-        float startX = 45.0f;
+        float fieldWidth = (sectionWidth - 68.0f) / 3.0f;
+        float startX = 48.0f;
 
         auto createInputRow = [&](float rowY, float defaultVal, std::function<void(float, int)> callback, std::shared_ptr<UIInputBox> outBoxes[]) {
             for (int i = 0; i < 3; ++i) {
@@ -54,6 +56,8 @@ namespace slate {
                     defaultVal
                 );
                 inputBox->setFontLoader(m_fontLoader);
+                inputBox->setDrawsBackground(true);
+                inputBox->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
 
                 std::weak_ptr<UIInputBox> weakBox = inputBox;
                 inputBox->setOnValueChanged([callback, i, weakBox](float val) {
@@ -67,7 +71,7 @@ namespace slate {
             }
         };
 
-        createInputRow(10.0f, 0.0f, [this](float val, int axis) {
+        createInputRow(25.0f, 0.0f, [this](float val, int axis) {
             if (axis == 0) m_positionValues.x = val;
             else if (axis == 1) m_positionValues.y = val;
             else if (axis == 2) m_positionValues.z = val;
@@ -77,7 +81,7 @@ namespace slate {
             }
         }, m_posInputBoxes);
 
-        createInputRow(52.0f, 0.0f, [this](float val, int axis) {
+        createInputRow(75.0f, 0.0f, [this](float val, int axis) {
             if (axis == 0) m_rotationValues.x = val;
             else if (axis == 1) m_rotationValues.y = val;
             else if (axis == 2) m_rotationValues.z = val;
@@ -87,7 +91,7 @@ namespace slate {
             }
         }, m_rotInputBoxes);
 
-        createInputRow(94.0f, 1.0f, [this](float val, int axis) {
+        createInputRow(125.0f, 1.0f, [this](float val, int axis) {
             if (axis == 0) m_scaleValues.x = val;
             else if (axis == 1) m_scaleValues.y = val;
             else if (axis == 2) m_scaleValues.z = val;
@@ -99,12 +103,14 @@ namespace slate {
 
         auto materialDropdown = std::make_shared<UIDropdown>(
             "MaterialDropdown",
-            glm::vec2(8.0f, 204.0f),
-            glm::vec2(panelWidth - 16.0f, 190.0f),
+            glm::vec2(8.0f, 240.0f),
+            glm::vec2(panelWidth - 16.0f, 290.0f),
             "Material",
             true
         );
         materialDropdown->setFontLoader(m_fontLoader);
+        materialDropdown->setDrawsBackground(true);
+        materialDropdown->setColor(glm::vec4(0.10f, 0.11f, 0.15f, 1.0f));
         materialDropdown->setOnToggle([this](bool) { updateChildLayouts(); });
         addChild(materialDropdown);
 
@@ -118,6 +124,8 @@ namespace slate {
                     defaultVal
                 );
                 inputBox->setFontLoader(m_fontLoader);
+                inputBox->setDrawsBackground(true);
+                inputBox->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
 
                 std::weak_ptr<UIInputBox> weakBox = inputBox;
                 inputBox->setOnValueChanged([callback, i, weakBox](float val) {
@@ -137,7 +145,7 @@ namespace slate {
             }
         };
 
-        createMatInputRow(10.0f, 1.0f, [this](float val, int idx) {
+        createMatInputRow(25.0f, 1.0f, [this](float val, int idx) {
             if (idx == 0) m_materialColorValues.r = val;
             else if (idx == 1) m_materialColorValues.g = val;
             else if (idx == 2) m_materialColorValues.b = val;
@@ -148,10 +156,10 @@ namespace slate {
             }
         }, m_matColorInputBoxes);
 
-        float fullFieldX = 90.0f;
-        float fullFieldWidth = sectionWidth - 98.0f;
+        float fullFieldX = 50.0f;
+        float fullFieldWidth = sectionWidth - 60.0f;
 
-        float floatRowY[4] = { 46.0f, 82.0f, 118.0f, 154.0f };
+        float floatRowY[4] = { 75.0f, 125.0f, 175.0f, 225.0f };
         float defaultFloatVals[4] = { 0.5f, 0.0f, 1.5f, 0.0f };
 
         for (int i = 0; i < 4; ++i) {
@@ -162,6 +170,8 @@ namespace slate {
                 defaultFloatVals[i]
             );
             inputBox->setFontLoader(m_fontLoader);
+            inputBox->setDrawsBackground(true);
+            inputBox->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
 
             std::weak_ptr<UIInputBox> weakBox = inputBox;
             inputBox->setOnValueChanged([this, i, weakBox](float val) {
@@ -206,22 +216,31 @@ namespace slate {
     void UIInspectorPanel::generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) {
         if (!m_visible) return;
 
-        if (m_drawsBackground) {
-            glm::vec2 absPos = getAbsolutePosition();
-            uint16_t panelIdx = static_cast<uint16_t>(vertices.size());
-            vertices.push_back(UIVertex{.pos = absPos, .color = m_color, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + m_size.x, absPos.y), .color = m_color, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + m_size.x, absPos.y + m_size.y), .color = m_color, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x, absPos.y + m_size.y), .color = m_color, .uv = glm::vec2(-1.0f)});
-            indices.push_back(panelIdx + 0); indices.push_back(panelIdx + 1); indices.push_back(panelIdx + 2);
-            indices.push_back(panelIdx + 0); indices.push_back(panelIdx + 2); indices.push_back(panelIdx + 3);
-        }
-
         if (m_children.size() < 3) return;
 
         auto headerBar = m_children[0];
         auto transformDropdown = std::static_pointer_cast<UIDropdown>(m_children[1]);
         auto materialDropdown = std::static_pointer_cast<UIDropdown>(m_children[2]);
+
+        if (m_drawsBackground) {
+            glm::vec2 absPos = getAbsolutePosition();
+            float panelWidth = m_size.x > 0 ? m_size.x : 300.0f;
+
+            float transH = transformDropdown->isExpanded() ? transformDropdown->getSize().y : transformDropdown->getHeaderHeight();
+            float matH = materialDropdown->isExpanded() ? materialDropdown->getSize().y : materialDropdown->getHeaderHeight();
+            float matPosY = transformDropdown->getPosition().y + transH + 8.0f;
+            float totalHeight = matPosY + matH + 10.0f;
+
+            glm::vec4 panelBgColor(0.004f, 0.0045f, 0.0055f, 1.0f);
+
+            uint16_t panelIdx = static_cast<uint16_t>(vertices.size());
+            vertices.push_back(UIVertex{.pos = absPos, .color = panelBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth, absPos.y), .color = panelBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth, absPos.y + totalHeight), .color = panelBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x, absPos.y + totalHeight), .color = panelBgColor, .uv = glm::vec2(-1.0f)});
+            indices.push_back(panelIdx + 0); indices.push_back(panelIdx + 1); indices.push_back(panelIdx + 2);
+            indices.push_back(panelIdx + 0); indices.push_back(panelIdx + 2); indices.push_back(panelIdx + 3);
+        }
 
         if (headerBar && headerBar->isVisible()) {
             glm::vec2 cPos = headerBar->getAbsolutePosition();
@@ -247,25 +266,52 @@ namespace slate {
 
         m_fontLoader->generateTextGeometry("Inspector", glm::vec2(headerAbsPos.x + 10.0f, headerAbsPos.y + 18.0f), textColor, vertices, indices);
 
-        // generate dropdown
+        glm::vec4 dropdownBgColor(0.010f, 0.011f, 0.015f, 1.0f);
+
+        if (transformDropdown->isExpanded()) {
+            glm::vec2 dPos = transformDropdown->getAbsolutePosition();
+            glm::vec2 dSize = transformDropdown->getSize();
+            float headerH = transformDropdown->getHeaderHeight();
+            uint16_t bgIdx = static_cast<uint16_t>(vertices.size());
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + dSize.y), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x, dPos.y + dSize.y), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            indices.push_back(bgIdx + 0); indices.push_back(bgIdx + 1); indices.push_back(bgIdx + 2);
+            indices.push_back(bgIdx + 0); indices.push_back(bgIdx + 2); indices.push_back(bgIdx + 3);
+        }
+
+        if (materialDropdown->isExpanded()) {
+            glm::vec2 dPos = materialDropdown->getAbsolutePosition();
+            glm::vec2 dSize = materialDropdown->getSize();
+            float headerH = materialDropdown->getHeaderHeight();
+            uint16_t bgIdx = static_cast<uint16_t>(vertices.size());
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + dSize.y), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x, dPos.y + dSize.y), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            indices.push_back(bgIdx + 0); indices.push_back(bgIdx + 1); indices.push_back(bgIdx + 2);
+            indices.push_back(bgIdx + 0); indices.push_back(bgIdx + 2); indices.push_back(bgIdx + 3);
+        }
+
+        // generate dropdown geometry
         transformDropdown->generateGeometry(vertices, indices);
         materialDropdown->generateGeometry(vertices, indices);
 
-        // draw only when dropdown active
         glm::vec2 transAbsPos = transformDropdown->getAbsolutePosition();
         if (transformDropdown->isExpanded()) {
-            m_fontLoader->generateTextGeometry("Position", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 28.0f + 12.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Rotation", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 28.0f + 54.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Scale", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 28.0f + 96.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Position", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 28.0f + 19.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Rotation", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 28.0f + 69.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Scale", glm::vec2(transAbsPos.x + 12.0f, transAbsPos.y + 28.0f + 119.0f), dimTextColor, vertices, indices);
         }
 
         glm::vec2 matAbsPos = materialDropdown->getAbsolutePosition();
         if (materialDropdown->isExpanded()) {
-            m_fontLoader->generateTextGeometry("Color", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 12.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Roughness", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 48.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Metallic", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 84.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("IOR", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 120.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Transmission", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 156.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Color", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 19.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Roughness", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 69.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Metallic", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 119.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("IOR", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 169.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Transmission", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 219.0f), dimTextColor, vertices, indices);
         }
     }
 
@@ -285,6 +331,9 @@ namespace slate {
 
             materialDropdown->setPosition(glm::vec2(8.0f, materialPosY));
             materialDropdown->setSize(glm::vec2(panelWidth - 16.0f, materialDropdown->getSize().y));
+
+            float materialHeight = materialDropdown->isExpanded() ? materialDropdown->getSize().y : materialDropdown->getHeaderHeight();
+            m_size.y = materialPosY + materialHeight + 10.0f;
         }
     }
 
