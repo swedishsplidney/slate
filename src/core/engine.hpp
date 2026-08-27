@@ -5,6 +5,7 @@
 #include "ui/ui_element.hpp"
 #include "ui/ui_manager.hpp"
 #include "ui/ui_inspector_panel.hpp"
+#include "ui/ui_hierarchy_panel.hpp"
 
 #include "camera.hpp"
 #include "renderer/renderer.hpp"
@@ -73,6 +74,7 @@ namespace slate {
         glm::vec3 m_dragWorldAxis{0.0f};
 
         std::shared_ptr<UIInspectorPanel> m_inspectorPanel;
+        std::shared_ptr<UIHierarchyPanel> m_hierarchyPanel;
 
         void setSelectedMeshIndex(int index);
     };

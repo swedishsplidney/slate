@@ -13,6 +13,7 @@
 #include "ui/ui_dockspace.hpp"
 #include "ui/ui_manager.hpp"
 #include "ui/ui_menu_bar.hpp"
+#include "ui/ui_hierarchy_panel.hpp"
 
 #include <SDL3/SDL_vulkan.h>
 #include <algorithm>
@@ -245,7 +246,19 @@ Engine::Engine() {
         }
       });
 
-  // add the inspector to dockspace
+  m_hierarchyPanel = std::make_shared<UIHierarchyPanel>("HierarchyPanel", glm::vec2(0.0f), glm::vec2(0.0f));
+  m_hierarchyPanel->setFontLoader(fontLoader);
+  m_hierarchyPanel->buildDefaultLayout();
+  m_hierarchyPanel->setSceneItems({"MeshEntity_01", "Cube_Model", "DirectionalLight"});
+
+  m_hierarchyPanel->setOnItemSelected([this](int index) {
+      m_selectedMeshIndex = index;
+      // update inspector target or refresh values based on selection
+      std::cout << "[editor] Selected entity index: " << index << "\n";
+  });
+
+  // add to dockspacec
+  mainDockSpace->addDockedChild(m_hierarchyPanel, DockSlot::RightSide, 300.0f);
   mainDockSpace->addDockedChild(m_inspectorPanel, DockSlot::RightSide, 300.0f);
 
   // viewport

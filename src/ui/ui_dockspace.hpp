@@ -33,46 +33,65 @@ namespace slate {
         void recalculateLayout() {
             float currentTop = 0.0f;
             float currentBottom = m_size.y;
-            float currentLeft = 0.0f;
-            float currentRight = m_size.x;
 
-            // top and bottom bars
+            float leftSideWidth = 0.0f;
+            float rightSideWidth = 0.0f;
+
+            std::vector<std::shared_ptr<UIElement>> leftChildren;
+            std::vector<std::shared_ptr<UIElement>> rightChildren;
+
             for (auto& child : m_children) {
                 auto it = m_dockMap.find(child);
                 if (it == m_dockMap.end()) continue;
+                if (it->second.slot == DockSlot::LeftSide) {
+                    leftChildren.push_back(child);
+                    leftSideWidth = std::max(leftSideWidth, it->second.preferredSize);
+                } else if (it->second.slot == DockSlot::RightSide) {
+                    rightChildren.push_back(child);
+                    rightSideWidth = std::max(rightSideWidth, it->second.preferredSize);
+                }
+            }
 
-                DockSlot slot = it->second.slot;
-                float prefSize = it->second.preferredSize;
-
-                if (slot == DockSlot::TopBar) {
+            // top and bottom
+            for (auto& child : m_children) {
+                auto it = m_dockMap.find(child);
+                if (it == m_dockMap.end()) continue;
+                if (it->second.slot == DockSlot::TopBar) {
                     child->setPosition({0.0f, currentTop});
-                    child->setSize({m_size.x, prefSize});
-                    currentTop += prefSize;
-                } else if (slot == DockSlot::BottomBar) {
-                    currentBottom -= prefSize;
+                    child->setSize({m_size.x, it->second.preferredSize});
+                    currentTop += it->second.preferredSize;
+                } else if (it->second.slot == DockSlot::BottomBar) {
+                    currentBottom -= it->second.preferredSize;
                     child->setPosition({0.0f, currentBottom});
-                    child->setSize({m_size.x, prefSize});
+                    child->setSize({m_size.x, it->second.preferredSize});
                 }
             }
 
             float availableHeight = currentBottom - currentTop;
 
-            // side bars and center
-            for (auto& child : m_children) {
-                auto it = m_dockMap.find(child);
-                if (it == m_dockMap.end()) continue;
+            // left
+            float currentLeft = 0.0f;
+            if (!leftChildren.empty()) {
+                float heightPerChild = availableHeight / leftChildren.size();
+                float childY = currentTop;
+                for (auto& child : leftChildren) {
+                    child->setPosition({currentLeft, childY});
+                    child->setSize({leftSideWidth, heightPerChild});
+                    childY += heightPerChild;
+                }
+                currentLeft += leftSideWidth;
+            }
 
-                DockSlot slot = it->second.slot;
-                float prefSize = it->second.preferredSize;
-
-                if (slot == DockSlot::LeftSide) {
-                    child->setPosition({currentLeft, currentTop});
-                    child->setSize({prefSize, availableHeight});
-                    currentLeft += prefSize;
-                } else if (slot == DockSlot::RightSide) {
-                    currentRight -= prefSize;
-                    child->setPosition({currentRight, currentTop});
-                    child->setSize({prefSize, availableHeight});
+            // right
+            float currentRight = m_size.x;
+            if (!rightChildren.empty()) {
+                currentRight -= rightSideWidth;
+                float heightPerChild = availableHeight / rightChildren.size();
+                float childY = currentTop;
+                for (auto& child : rightChildren) {
+                    child->setPosition({currentRight, childY});
+                    child->setSize({rightSideWidth, heightPerChild});
+                    childY += heightPerChild;
                 }
             }
 
@@ -80,7 +99,6 @@ namespace slate {
             for (auto& child : m_children) {
                 auto it = m_dockMap.find(child);
                 if (it == m_dockMap.end() || it->second.slot != DockSlot::Center) continue;
-
                 child->setPosition({currentLeft, currentTop});
                 child->setSize({currentRight - currentLeft, availableHeight});
             }
