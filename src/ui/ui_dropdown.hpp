@@ -14,6 +14,7 @@ namespace slate {
 
         void setFontLoader(std::shared_ptr<FontLoader> fontLoader) { m_fontLoader = fontLoader; }
 
+        void update(float deltaTime) override;
         void onEvent(const SDL_Event& event) override;
         void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t> &indices) override;
 
@@ -21,8 +22,7 @@ namespace slate {
         void setExpanded(bool expanded);
 
         void setOnToggle(std::function<void(bool)> callback) { m_onToggleCallback = callback; }
-
-        // add child elements into collapsible container
+        
         void addContentElement(const std::shared_ptr<UIElement>& element);
 
         float getHeaderHeight() const { return m_headerHeight; }

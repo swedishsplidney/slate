@@ -7,11 +7,9 @@ namespace slate {
         : UIElement(name, position, size), m_title(title), m_isExpanded(defualtExpanded) {
         setDrawsBackground(false);
 
-        // internal container
         m_contentContainer = std::make_shared<UIElement>(name + "_Content", glm::vec2(0.0f, m_headerHeight), glm::vec2(size.x, size.y - m_headerHeight));
         m_contentContainer->setDrawsBackground(false);
         m_contentContainer->setVisible(m_isExpanded);
-        addChild(m_contentContainer);
     }
 
     void UIDropdown::setExpanded(bool expanded) {
@@ -26,7 +24,26 @@ namespace slate {
         }
     }
 
+    void UIDropdown::update(float deltaTime) {
+        UIElement::update(deltaTime);
+        if (m_contentContainer) {
+            if (m_contentContainer->isParentExpired()) {
+                m_contentContainer->setParent(shared_from_this());
+            }
+            if (m_isExpanded) {
+                m_contentContainer->update(deltaTime);
+            }
+        }
+    }
+
     void UIDropdown::onEvent(const SDL_Event& event) {
+        UIElement::onEvent(event);
+        if (m_contentContainer) {
+            if (m_contentContainer->isParentExpired()) {
+                m_contentContainer->setParent(shared_from_this());
+            }
+        }
+
         if (m_isExpanded && m_contentContainer) {
             m_contentContainer->onEvent(event);
         }
@@ -47,6 +64,12 @@ namespace slate {
 
     void UIDropdown::generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) {
         if (!m_visible) return;
+
+        if (m_contentContainer) {
+            if (m_contentContainer->isParentExpired()) {
+                m_contentContainer->setParent(shared_from_this());
+            }
+        }
 
         glm::vec2 absPos = getAbsolutePosition();
         uint16_t headerIdx = static_cast<uint16_t>(vertices.size());
@@ -72,6 +95,9 @@ namespace slate {
 
     void UIDropdown::addContentElement(const std::shared_ptr<UIElement>& element) {
         if (m_contentContainer) {
+            if (m_contentContainer->isParentExpired()) {
+                m_contentContainer->setParent(shared_from_this());
+            }
             m_contentContainer->addChild(element);
         }
     }

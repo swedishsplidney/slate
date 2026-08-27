@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include <cstdint> // <-- For uint16_t
+#include <cstdint>
 #include <SDL3/SDL_events.h>
 #include "ui/ui_vertex.hpp"
 
@@ -18,6 +18,8 @@ namespace slate {
 
         // hierarchy management
         void addChild(std::shared_ptr<UIElement> child);
+        void setParent(std::shared_ptr<UIElement> parent) { m_parent = parent; }
+        bool isParentExpired() const { return m_parent.expired(); }
 
         // lifecycle methods
         virtual void update(float deltaTime);
