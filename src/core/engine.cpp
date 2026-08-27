@@ -585,6 +585,12 @@ namespace slate {
                     shouldClose = true;
                 }
 
+                // ui refresh
+                if (event.type == SDL_EVENT_USER) {
+                    m_uiManager->markDirty();
+                    continue;
+                }
+
                 if (m_uiManager) {
                     m_uiManager->onEvent(event);
                 }
@@ -614,6 +620,13 @@ namespace slate {
                     float my = static_cast<float>(event.button.y);
                     mousePos = glm::vec2(mx, my);
                     clickInsideViewport = isPointInElement(mousePos, m_viewportPanel);
+
+                    // ui click
+                    if (!clickInsideViewport) {
+                        m_viewportFocused = false;
+
+                        continue;
+                    }
 
                     if (clickInsideViewport && (event.button.button == SDL_BUTTON_LEFT || event.button.button == SDL_BUTTON_RIGHT)) {
                         m_viewportFocused = true;

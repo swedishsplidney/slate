@@ -7,6 +7,8 @@ namespace slate {
         : UIElement(name, position, size), m_title(title), m_isExpanded(defualtExpanded) {
         setDrawsBackground(false);
 
+        m_headerHeight = 28.0f;
+
         m_contentContainer = std::make_shared<UIElement>(name + "_Content", glm::vec2(0.0f, m_headerHeight), glm::vec2(size.x, size.y - m_headerHeight));
         m_contentContainer->setDrawsBackground(false);
         m_contentContainer->setVisible(m_isExpanded);
@@ -21,6 +23,12 @@ namespace slate {
             if (m_onToggleCallback) {
                 m_onToggleCallback(m_isExpanded);
             }
+
+            // redraw
+            SDL_Event refreshEvent;
+            SDL_zero(refreshEvent);
+            refreshEvent.type = SDL_EVENT_USER;
+            SDL_PushEvent(&refreshEvent);
         }
     }
 
@@ -48,14 +56,28 @@ namespace slate {
             m_contentContainer->onEvent(event);
         }
 
-        // header click
+        // click detection
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
             if (event.button.button == SDL_BUTTON_LEFT) {
+                if (event.button.timestamp == m_lastClickTimestamp) {
+                    return;
+                }
+
                 glm::vec2 absPos = getAbsolutePosition();
                 float mouseX = event.button.x;
                 float mouseY = event.button.y;
 
-                if (mouseX >= absPos.x && mouseX <= absPos.x + m_size.x && mouseY >= absPos.y && mouseY <= absPos.y + m_headerHeight) {
+                float hitBoxOffsetX = 0.0f;
+                float hitBoxOffsetY = 0.0f;
+
+                float minX = absPos.x + hitBoxOffsetX;
+                float maxX = absPos.x + m_size.x + hitBoxOffsetX;
+                float minY = absPos.y + hitBoxOffsetY;
+                float maxY = absPos.y + m_headerHeight + hitBoxOffsetY;
+
+                if (mouseX >= minX && mouseX <= maxX && mouseY >= minY && mouseY <= maxY) {
+                    m_lastClickTimestamp = event.button.timestamp;
+
                     setExpanded(!m_isExpanded);
                 }
             }
@@ -73,6 +95,7 @@ namespace slate {
 
         glm::vec2 absPos = getAbsolutePosition();
         uint16_t headerIdx = static_cast<uint16_t>(vertices.size());
+
         glm::vec4 headerColor(0.016f, 0.018f, 0.023f, 1.0f);
 
         vertices.push_back(UIVertex{.pos = absPos, .color = headerColor, .uv = glm::vec2(-1.0f)});
@@ -85,7 +108,7 @@ namespace slate {
         if (m_fontLoader) {
             std::string indicator = m_isExpanded ? "v  " : ">  ";
             glm::vec4 textColor(0.85f, 0.85f, 0.90f, 1.0f);
-            m_fontLoader->generateTextGeometry(indicator + m_title, glm::vec2(absPos.x + 10.0f, absPos.y + 18.0f), textColor, vertices, indices);
+            m_fontLoader->generateTextGeometry(indicator + m_title, glm::vec2(absPos.x + 10.0f, absPos.y + 19.0f), textColor, vertices, indices);
         }
 
         if (m_isExpanded && m_contentContainer) {

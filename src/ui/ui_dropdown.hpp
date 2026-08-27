@@ -22,7 +22,7 @@ namespace slate {
         void setExpanded(bool expanded);
 
         void setOnToggle(std::function<void(bool)> callback) { m_onToggleCallback = callback; }
-        
+
         void addContentElement(const std::shared_ptr<UIElement>& element);
 
         float getHeaderHeight() const { return m_headerHeight; }
@@ -31,6 +31,8 @@ namespace slate {
         std::string m_title;
         bool m_isExpanded;
         float m_headerHeight{28.0f};
+
+        uint64_t m_lastClickTimestamp{0};
 
         std::shared_ptr<FontLoader> m_fontLoader;
         std::shared_ptr<UIElement> m_contentContainer;
