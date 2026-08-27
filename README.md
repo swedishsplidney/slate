@@ -36,7 +36,7 @@ slate engine is a cross-platform, open source, 3d, fully featured game engine bu
 
 # the stack:
 
-* JetBrains CLion
+* JetBrains CLion / Neovim
 * c++
 * CMake
 * vulkan
