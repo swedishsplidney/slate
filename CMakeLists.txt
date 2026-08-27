@@ -73,6 +73,8 @@ add_executable(slate
         src/ui/ui_inspector_panel.cpp
         src/ui/ui_input_box.cpp
         src/ui/ui_input_box.hpp
+        src/ui/ui_dropdown.cpp
+        src/ui/ui_dropdown.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
