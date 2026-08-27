@@ -118,4 +118,4 @@ add_custom_command(
         COMMENT "copying assets and models to build output directory..."
 )
 
-message(STATUS "slate engine configured successfully with SDL3!")
+message(STATUS "slate engine configured successfully with sdl3!")
