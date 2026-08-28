@@ -98,6 +98,30 @@ namespace slate {
             }
         }
 
+        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override {
+            if (!m_visible) return;
+
+            // sidebars and viewport
+            for (auto& child : m_children) {
+                auto it = m_dockMap.find(child);
+                if (it == m_dockMap.end()) {
+                    child->generateGeometry(vertices, indices);
+                    continue;
+                }
+                if (it->second.slot != DockSlot::TopBar && it->second.slot != DockSlot::BottomBar) {
+                    child->generateGeometry(vertices, indices);
+                }
+            }
+
+            // top and bottom bar
+            for (auto& child : m_children) {
+                auto it = m_dockMap.find(child);
+                if (it != m_dockMap.end() && (it->second.slot == DockSlot::TopBar || it->second.slot == DockSlot::BottomBar)) {
+                    child->generateGeometry(vertices, indices);
+                }
+            }
+        }
+
     private:
         struct DockInfo {
             DockSlot slot;

@@ -187,13 +187,6 @@ Engine::Engine() {
             }
       });
 
-  // bottom bar
-  auto bottomBar = std::make_shared<UIElement>("BottomBar", glm::vec2(0.0f),
-                                               glm::vec2(0.0f));
-  bottomBar->setDrawsBackground(true);
-  bottomBar->setColor(glm::vec4(0.008f, 0.009f, 0.011f, 1.0f));
-  mainDockSpace->addDockedChild(bottomBar, DockSlot::BottomBar, 25.0f);
-
   // left
   auto leftSidebarScroll = std::make_shared<UIScrollableContainer>(
   "LeftSidebarScroll", glm::vec2(0.0f), glm::vec2(0.0f)
@@ -304,6 +297,13 @@ Engine::Engine() {
   rightSidebarScroll->addChild(m_inspectorPanel);
 
   mainDockSpace->addDockedChild(rightSidebarScroll, DockSlot::RightSide, 300.0f);
+
+  // bottom bar
+  auto bottomBar = std::make_shared<UIElement>("BottomBar", glm::vec2(0.0f),
+                                               glm::vec2(0.0f));
+  bottomBar->setDrawsBackground(true);
+  bottomBar->setColor(glm::vec4(0.008f, 0.009f, 0.011f, 1.0f));
+  mainDockSpace->addDockedChild(bottomBar, DockSlot::BottomBar, 25.0f);
 
   // viewport
   m_viewportPanel = std::make_shared<UIElement>(
