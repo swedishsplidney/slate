@@ -77,6 +77,8 @@ add_executable(slate
         src/ui/ui_dropdown.hpp
         src/ui/ui_hierarchy_panel.cpp
         src/ui/ui_hierarchy_panel.hpp
+        src/ui/ui_scrollable_container.cpp
+        src/ui/ui_scrollable_container.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
