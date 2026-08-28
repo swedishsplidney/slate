@@ -79,6 +79,29 @@ bool Engine::isPointInElement(glm::vec2 point,
           point.y <= pos.y + size.y);
 }
 
+void Engine::updateHierarchyItems() {
+  if (!m_hierarchyPanel || !m_renderer) return;
+
+  auto vkRenderer = static_cast<VulkanRenderer *>(m_renderer.get());
+  const auto &sceneMeshes = vkRenderer->getSceneMeshes();
+
+  std::vector<std::string> itemNames;
+
+  for (size_t i = 0; i < sceneMeshes.size(); ++i) {
+    std::string name = sceneMeshes[i]->getName();
+    if (name.empty()) {
+      name = "MeshEntity_" + std::to_string(i);
+    }
+    itemNames.push_back(name);
+  }
+
+  if (itemNames.empty()) {
+    itemNames.push_back("No Meshes Loaded");
+  }
+
+  m_hierarchyPanel->setSceneItems(itemNames);
+}
+
 Engine::Engine() {
   initWindow();
 
@@ -124,7 +147,13 @@ Engine::Engine() {
   mainDockSpace->addDockedChild(menuBar, DockSlot::TopBar, 30.0f);
 
   menuBar->setOnCommandTriggered([this](const std::string &commandId) {
-    m_commandRegistry->execute(commandId, m_commandContext);
+    bool success = m_commandRegistry->execute(commandId, m_commandContext);
+        if (success && commandId == "file.import_mesh") {
+            updateHierarchyItems();
+            if (m_uiManager) {
+                m_uiManager->markDirty();
+            }
+        }
   });
 
   MenuHeader fileMenu{"File",
@@ -150,7 +179,11 @@ Engine::Engine() {
   auto importButton = std::make_shared<UIButton>(
       "importMeshBtn", glm::vec2(10.0f, 3.0f), glm::vec2(120.0f, 24.0f),
       [this]() {
-        m_commandRegistry->execute("file.import_mesh", m_commandContext);
+        bool success = m_commandRegistry->execute("file.import_mesh", m_commandContext);
+            if (success) {
+                updateHierarchyItems();
+                m_uiManager->markDirty();
+            }
       });
 
   // bottom bar
@@ -249,12 +282,10 @@ Engine::Engine() {
   m_hierarchyPanel = std::make_shared<UIHierarchyPanel>("HierarchyPanel", glm::vec2(0.0f), glm::vec2(0.0f));
   m_hierarchyPanel->setFontLoader(fontLoader);
   m_hierarchyPanel->buildDefaultLayout();
-  m_hierarchyPanel->setSceneItems({"MeshEntity_01", "Cube_Model", "DirectionalLight"});
 
   m_hierarchyPanel->setOnItemSelected([this](int index) {
       m_selectedMeshIndex = index;
-      // update inspector target or refresh values based on selection
-      std::cout << "[editor] Selected entity index: " << index << "\n";
+      std::cout << "[editor] selected entity index: " << index << "\n";
   });
 
   // add to dockspacec
@@ -271,6 +302,8 @@ Engine::Engine() {
 
   m_commandRegistry->execute("file.import_mesh", m_commandContext,
                              {"models/test_obj.obj"});
+
+  updateHierarchyItems();
 
   m_cursorLocked = false;
 }

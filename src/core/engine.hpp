@@ -8,6 +8,7 @@
 #include "ui/ui_hierarchy_panel.hpp"
 
 #include "camera.hpp"
+#include "renderer/mesh.hpp"
 #include "renderer/renderer.hpp"
 #include "core/commands/command_registry.hpp"
 
@@ -75,8 +76,10 @@ namespace slate {
 
         std::shared_ptr<UIInspectorPanel> m_inspectorPanel;
         std::shared_ptr<UIHierarchyPanel> m_hierarchyPanel;
+        std::vector<std::shared_ptr<Mesh>> m_meshes;
 
         void setSelectedMeshIndex(int index);
+        void updateHierarchyItems();
     };
 
 }

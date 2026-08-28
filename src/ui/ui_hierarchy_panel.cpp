@@ -27,8 +27,11 @@ namespace slate {
             glm::vec2 mousePos(event.button.x, event.button.y);
             glm::vec2 absPos = getAbsolutePosition();
 
-            if (mousePos.x >= absPos.x && mousePos.x <= absPos.x + m_size.x &&
-                mousePos.y >= absPos.y + 28.0f && mousePos.y <= absPos.y + m_size.y) {
+            float panelWidth = m_size.x > 0 ? m_size.x : 300.0f;
+            float panelHeight = m_size.y > 0 ? m_size.y : 350.0f;
+
+            if (mousePos.x >= absPos.x && mousePos.x <= absPos.x + panelWidth &&
+                mousePos.y >= absPos.y + 28.0f && mousePos.y <= absPos.y + panelHeight) {
 
                 float relativeY = mousePos.y - (absPos.y + 28.0f);
                 int clickedIndex = static_cast<int>(relativeY / 24.0f);
@@ -48,7 +51,7 @@ namespace slate {
 
         glm::vec2 absPos = getAbsolutePosition();
         float panelWidth = m_size.x > 0 ? m_size.x : 300.0f;
-        float panelHeight = m_size.y > 0 ? m_size.y : 300.0f;
+        float panelHeight = m_size.y > 0 ? m_size.y : 350.0f;
 
         // bg
         glm::vec4 panelBgColor(0.004f, 0.0045f, 0.0055f, 1.0f);
