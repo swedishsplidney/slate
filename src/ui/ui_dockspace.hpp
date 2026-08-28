@@ -72,12 +72,9 @@ namespace slate {
             // left
             float currentLeft = 0.0f;
             if (!leftChildren.empty()) {
-                float heightPerChild = availableHeight / leftChildren.size();
-                float childY = currentTop;
                 for (auto& child : leftChildren) {
-                    child->setPosition({currentLeft, childY});
-                    child->setSize({leftSideWidth, heightPerChild});
-                    childY += heightPerChild;
+                    child->setPosition({currentLeft, currentTop});
+                    child->setSize({leftSideWidth, availableHeight});
                 }
                 currentLeft += leftSideWidth;
             }
@@ -86,21 +83,9 @@ namespace slate {
             float currentRight = m_size.x;
             if (!rightChildren.empty()) {
                 currentRight -= rightSideWidth;
-                float childY = currentTop;
-
-                for (size_t i = 0; i < rightChildren.size(); ++i) {
-                    auto& child = rightChildren[i];
-                    float childHeight = 0.0f;
-
-                    if (i == 0 && rightChildren.size() > 1) {
-                        childHeight = 200.0f;
-                    } else {
-                        childHeight = (currentTop + availableHeight) - childY;
-                    }
-
-                    child->setPosition({currentRight, childY});
-                    child->setSize({rightSideWidth, childHeight});
-                    childY += childHeight;
+                for (auto& child : rightChildren) {
+                    child->setPosition({currentRight, currentTop});
+                    child->setSize({rightSideWidth, availableHeight});
                 }
             }
 

@@ -14,6 +14,7 @@
 #include "ui/ui_manager.hpp"
 #include "ui/ui_menu_bar.hpp"
 #include "ui/ui_hierarchy_panel.hpp"
+#include "ui/ui_scrollable_container.hpp"
 
 #include <SDL3/SDL_vulkan.h>
 #include <algorithm>
@@ -194,13 +195,24 @@ Engine::Engine() {
   mainDockSpace->addDockedChild(bottomBar, DockSlot::BottomBar, 25.0f);
 
   // left
-  auto leftPanel = std::make_shared<UIElement>("LeftPanel", glm::vec2(0.0f),
-                                               glm::vec2(0.0f));
+  auto leftSidebarScroll = std::make_shared<UIScrollableContainer>(
+  "LeftSidebarScroll", glm::vec2(0.0f), glm::vec2(0.0f)
+  );
+
+  auto leftPanel = std::make_shared<UIElement>("LeftPanel", glm::vec2(0.0f), glm::vec2(0.0f));
   leftPanel->setDrawsBackground(true);
   leftPanel->setColor(glm::vec4(0.004f, 0.005f, 0.008f, 0.1f));
-  mainDockSpace->addDockedChild(leftPanel, DockSlot::LeftSide, 0.0f);
+
+  leftSidebarScroll->addChild(leftPanel);
+
+  mainDockSpace->addDockedChild(leftSidebarScroll, DockSlot::LeftSide, 0.0f);
 
   // right
+  auto rightSidebarScroll = std::make_shared<UIScrollableContainer>(
+  "RightSidebarScroll", glm::vec2(0.0f), glm::vec2(0.0f)
+  );
+  rightSidebarScroll->setUIManager(m_uiManager.get());
+
   m_inspectorPanel = std::make_shared<UIInspectorPanel>(
       "InspectorPanel", glm::vec2(0.0f), glm::vec2(0.0f));
 
@@ -210,76 +222,76 @@ Engine::Engine() {
   m_inspectorPanel->setColor(glm::vec4(0.008f, 0.015f, 0.016f, 0.1f));
 
   m_inspectorPanel->setOnPositionChanged([this](float x, float y, float z) {
-    m_commandRegistry->execute(
-        "editor.set_position", m_commandContext,
-        {std::to_string(x), std::to_string(y), std::to_string(z)});
+      m_commandRegistry->execute(
+          "editor.set_position", m_commandContext,
+          {std::to_string(x), std::to_string(y), std::to_string(z)});
   });
 
   m_inspectorPanel->setOnRotationChanged([this](float x, float y, float z) {
-    glm::quat q = glm::quat(glm::radians(glm::vec3(x, y, z)));
-    m_commandRegistry->execute("editor.set_rotation", m_commandContext,
-                               {std::to_string(q.w), std::to_string(q.x),
-                                std::to_string(q.y), std::to_string(q.z)});
+      glm::quat q = glm::quat(glm::radians(glm::vec3(x, y, z)));
+      m_commandRegistry->execute("editor.set_rotation", m_commandContext,
+                                   {std::to_string(q.w), std::to_string(q.x),
+                                    std::to_string(q.y), std::to_string(q.z)});
   });
 
   m_inspectorPanel->setOnScaleChanged([this](float x, float y, float z) {
-    m_commandRegistry->execute(
-        "editor.set_scale", m_commandContext,
-        {std::to_string(x), std::to_string(y), std::to_string(z)});
+      m_commandRegistry->execute(
+          "editor.set_scale", m_commandContext,
+          {std::to_string(x), std::to_string(y), std::to_string(z)});
   });
 
   m_inspectorPanel->setOnMaterialVec4Changed(
       [this](int propertyType, const glm::vec4 &color) {
-        auto renderer = static_cast<VulkanRenderer *>(m_renderer.get());
-        uint32_t materialId = 0;
-        if (renderer) {
-          auto &sceneMeshes = renderer->getSceneMeshes();
-          if (m_selectedMeshIndex >= 0 &&
-              m_selectedMeshIndex < sceneMeshes.size() &&
-              sceneMeshes[m_selectedMeshIndex]) {
-            materialId = sceneMeshes[m_selectedMeshIndex]->getMaterialId();
+          auto renderer = static_cast<VulkanRenderer *>(m_renderer.get());
+          uint32_t materialId = 0;
+          if (renderer) {
+              auto &sceneMeshes = renderer->getSceneMeshes();
+              if (m_selectedMeshIndex >= 0 &&
+                  m_selectedMeshIndex < sceneMeshes.size() &&
+                  sceneMeshes[m_selectedMeshIndex]) {
+                  materialId = sceneMeshes[m_selectedMeshIndex]->getMaterialId();
+              }
           }
-        }
 
-        m_commandRegistry->execute(
-            "material.update_vec4", m_commandContext,
-            {std::to_string(materialId), std::to_string(propertyType),
-             std::to_string(color.r), std::to_string(color.g),
-             std::to_string(color.b), std::to_string(color.a)});
+          m_commandRegistry->execute(
+              "material.update_vec4", m_commandContext,
+              {std::to_string(materialId), std::to_string(propertyType),
+               std::to_string(color.r), std::to_string(color.g),
+               std::to_string(color.b), std::to_string(color.a)});
       });
 
   m_inspectorPanel->setOnMaterialFloatChanged(
       [this](int propertyType, float val) {
-        auto renderer = static_cast<VulkanRenderer *>(m_renderer.get());
-        uint32_t materialId = 0;
-        if (renderer) {
-          auto &sceneMeshes = renderer->getSceneMeshes();
-          if (m_selectedMeshIndex >= 0 &&
-              m_selectedMeshIndex < sceneMeshes.size() &&
-              sceneMeshes[m_selectedMeshIndex]) {
-            materialId = sceneMeshes[m_selectedMeshIndex]->getMaterialId();
-          }
-        }
-
-        m_commandRegistry->execute("material.update_float", m_commandContext,
-                                   {std::to_string(materialId),
-                                    std::to_string(propertyType),
-                                    std::to_string(val)});
-
-        if (propertyType == 3) {
+          auto renderer = static_cast<VulkanRenderer *>(m_renderer.get());
+          uint32_t materialId = 0;
           if (renderer) {
-            auto &sceneMeshes = renderer->getSceneMeshes();
-            if (m_selectedMeshIndex >= 0 &&
-                m_selectedMeshIndex < sceneMeshes.size() &&
-                sceneMeshes[m_selectedMeshIndex]) {
-              auto &mesh = sceneMeshes[m_selectedMeshIndex];
-              mesh->setTransparent(val > 0.0f);
-            }
+              auto &sceneMeshes = renderer->getSceneMeshes();
+              if (m_selectedMeshIndex >= 0 &&
+                  m_selectedMeshIndex < sceneMeshes.size() &&
+                  sceneMeshes[m_selectedMeshIndex]) {
+                  materialId = sceneMeshes[m_selectedMeshIndex]->getMaterialId();
+              }
           }
-        }
+
+          m_commandRegistry->execute("material.update_float", m_commandContext,
+                                     {std::to_string(materialId),
+                                      std::to_string(propertyType),
+                                      std::to_string(val)});
+
+          if (propertyType == 3) {
+              if (renderer) {
+                  auto &sceneMeshes = renderer->getSceneMeshes();
+                  if (m_selectedMeshIndex >= 0 &&
+                      m_selectedMeshIndex < sceneMeshes.size() &&
+                      sceneMeshes[m_selectedMeshIndex]) {
+                      auto &mesh = sceneMeshes[m_selectedMeshIndex];
+                      mesh->setTransparent(val > 0.0f);
+                  }
+              }
+          }
       });
 
-  m_hierarchyPanel = std::make_shared<UIHierarchyPanel>("HierarchyPanel", glm::vec2(0.0f), glm::vec2(0.0f));
+  m_hierarchyPanel = std::make_shared<UIHierarchyPanel>("HierarchyPanel", glm::vec2(0.0f), glm::vec2(0.0f, 200.0f));
   m_hierarchyPanel->setFontLoader(fontLoader);
   m_hierarchyPanel->buildDefaultLayout();
 
@@ -288,9 +300,10 @@ Engine::Engine() {
       std::cout << "[editor] selected entity index: " << index << "\n";
   });
 
-  // add to dockspacec
-  mainDockSpace->addDockedChild(m_hierarchyPanel, DockSlot::RightSide, 300.0f);
-  mainDockSpace->addDockedChild(m_inspectorPanel, DockSlot::RightSide, 300.0f);
+  rightSidebarScroll->addChild(m_hierarchyPanel);
+  rightSidebarScroll->addChild(m_inspectorPanel);
+
+  mainDockSpace->addDockedChild(rightSidebarScroll, DockSlot::RightSide, 300.0f);
 
   // viewport
   m_viewportPanel = std::make_shared<UIElement>(
