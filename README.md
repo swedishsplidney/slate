@@ -1,4 +1,6 @@
-# slate engine
+# Slate Engine
+
+![slate engine logo](assets/slate%20engine%20logo%20darkbg.svg)
 
 ![C++](https://img.shields.io/badge/c%2B%2B_20-%2300599C.svg?style=for-the-badge&logo=cplusplus&logoColor=white)
 ![Vulkan API](https://img.shields.io/badge/Vulkan-%23AC162C.svg?style=for-the-badge&logo=vulkan&logoColor=white&logoSize=auto)
