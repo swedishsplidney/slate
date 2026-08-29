@@ -5,6 +5,7 @@
 ![SDL3](https://img.shields.io/badge/SDL3-%2314385C.svg?style=for-the-badge&logo=sdl&logoColor=white)
 ![GLM](https://img.shields.io/badge/GLM-%23FFB13B.svg?style=for-the-badge)
 ![CMake](https://img.shields.io/badge/CMake-%23008FBA.svg?style=for-the-badge&logo=cmake&logoColor=white)
+![GPLv3]( 	https://img.shields.io/badge/GPL--3.0-red?style=for-the-badge)
 ![Linux](https://img.shields.io/badge/Linux-%23FCC624.svg?style=for-the-badge&logo=linux&logoColor=black)
 ![windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
 ![macos](https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white)
