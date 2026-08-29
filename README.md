@@ -6,7 +6,7 @@
   </a>
 </p>
 
-<p align="center">
+<h1 align="center">
   <img src="https://img.shields.io/badge/c%2B%2B_20-%2300599C.svg?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Vulkan-%23AC162C.svg?style=for-the-badge&logo=vulkan&logoColor=white" alt="Vulkan">
   <img src="https://img.shields.io/badge/SDL3-%2314385C.svg?style=for-the-badge&logo=sdl&logoColor=white" alt="SDL3">
@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/Linux-%23FCC624.svg?style=for-the-badge&logo=linux&logoColor=black" alt="Linux">
   <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows">
   <img src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS">
-</p>
+</h1>
 
 **Slate Engine** is an open source, cross-platform, fully featured game engine to create 2d and 3d games from a single interface. It is currently very, very early in development, but i'm actively working on it!
 
