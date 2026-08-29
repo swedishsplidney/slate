@@ -32,6 +32,26 @@
 
 ---
 
+# technical info:
+
+* **indexed rendering:** for good memory efficiency while mapping triangles
+* **backface culling:** because why would you render more than you need to
+* **double-buffering:** basically just vsync, protects from screen tears
+* **pbr material system:** realistic cook-torrance pbr material system with a semi-accurate refraction approximator
+* **obj / mtl importing:** to import all the 3d models and their materials
+* **automatic earcut triangulation:** so it can handle the most complex of n-gons
+* **fully custom persistent ui system:** designed from scratch for efficiency and functionality
+
+---
+
+# future features:
+
+* scene saving
+* physics
+* scriptable objects
+
+---
+
 # building from source:
 
 no premade binaries are available yet, but you can easily build it from source:
@@ -68,27 +88,7 @@ then you can run it:
 
 ---
 
-# technical info:
-
-* **indexed rendering:** for good memory efficiency while mapping triangles
-* **backface culling:** because why would you render more than you need to
-* **double-buffering:** basically just vsync, protects from screen tears
-* **pbr material system:** realistic cook-torrance pbr material system with a semi-accurate refraction approximator
-* **obj / mtl importing:** to import all the 3d models and their materials
-* **automatic earcut triangulation:** so it can handle the most complex of n-gons
-* **fully custom persistent ui system:** designed from scratch for efficiency and functionality
-
----
-
-# future features:
-
-* scene saving
-* physics
-* scriptable objects
-
----
-
-# built with:
+# built using:
 
 * C++ 20
 * Vulkan 1.3
@@ -104,4 +104,12 @@ no generative ai or LLMs were used to write or debug any of this code
 
 ---
 
-created by **swedishsplidney** for hack club stardance 2026
+# license:
+
+slate engine is open source, licensed under the GPLv3 license
+
+see the `LICENSE` file for details
+
+---
+
+created by **swedishsplidney**
