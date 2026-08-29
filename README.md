@@ -16,7 +16,7 @@
 ![windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
 ![macos](https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white)
 
-slate engine is a cross-platform, open source, 3d, fully featured game engine built using c++ and vulkan/sdl3.
+**Slate Engine** is an open source, cross-platform, fully featured game engine to create 2d and 3d games from a single interface. It is currently very, very early in development, but i'm actively working on it!
 
 ---
 
