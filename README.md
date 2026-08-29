@@ -9,7 +9,7 @@ slate engine is a cross-platform, open source, 3d, fully featured game engine bu
 * obj importing
 * fully customizeable .json material system (with support for importing .mtl files)
 * transform and rotation gizmos
-* custom ui inspector panel to modify object properties
+* custom ui inspector and hierarchy panel to modify object properties
 
 ---
 
