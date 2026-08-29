@@ -289,7 +289,7 @@ Engine::Engine() {
   m_hierarchyPanel->buildDefaultLayout();
 
   m_hierarchyPanel->setOnItemSelected([this](int index) {
-      m_selectedMeshIndex = index;
+      setSelectedMeshIndex(index);
       std::cout << "[editor] selected entity index: " << index << "\n";
   });
 
@@ -626,60 +626,64 @@ int Engine::checkGizmoHit(const glm::vec2 &mousePos) {
 }
 
 void Engine::setSelectedMeshIndex(int index) {
-  m_selectedMeshIndex = index;
+    m_selectedMeshIndex = index;
 
-  if (m_inspectorPanel) {
-    auto renderer = static_cast<VulkanRenderer *>(m_renderer.get());
-    auto &sceneMeshes = renderer->getSceneMeshes();
-
-    if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() &&
-        sceneMeshes[m_selectedMeshIndex]) {
-      auto &mesh = sceneMeshes[m_selectedMeshIndex];
-      m_inspectorPanel->setTargetObject(mesh->getName());
-
-      glm::mat4 modelMat = mesh->getModelMatrix();
-      glm::vec3 currentPos = glm::vec3(modelMat[3]);
-      glm::vec3 currentScale(glm::length(modelMat[0]), glm::length(modelMat[1]),
-                             glm::length(modelMat[2]));
-
-      glm::mat3 rotMat(
-          modelMat[0] / (currentScale.x != 0.0f ? currentScale.x : 1.0f),
-          modelMat[1] / (currentScale.y != 0.0f ? currentScale.y : 1.0f),
-          modelMat[2] / (currentScale.z != 0.0f ? currentScale.z : 1.0f));
-      glm::vec3 currentRot =
-          glm::degrees(glm::eulerAngles(glm::quat_cast(rotMat)));
-
-      m_inspectorPanel->setPositionValues(currentPos);
-      m_inspectorPanel->setRotationValues(currentRot);
-      m_inspectorPanel->setScaleValues(currentScale);
-
-      uint32_t materialId = mesh->getMaterialId();
-      auto &material = renderer->getGlobalMaterials()[materialId];
-
-      m_inspectorPanel->setMaterialColorValues(material.gpuData.albedoFactor);
-      m_inspectorPanel->setRoughness(material.gpuData.roughnessFactor);
-      m_inspectorPanel->setMetallic(material.gpuData.metallicFactor);
-      m_inspectorPanel->setTransmission(material.gpuData.transmissionFactor);
-      m_inspectorPanel->setIOR(material.gpuData.ior);
-
-    } else {
-      // deselect
-      m_inspectorPanel->setTargetObject("None");
-      m_inspectorPanel->setPositionValues(glm::vec3(0.0f));
-      m_inspectorPanel->setRotationValues(glm::vec3(0.0f));
-      m_inspectorPanel->setScaleValues(glm::vec3(1.0f));
-
-      m_inspectorPanel->setMaterialColorValues(glm::vec4(1.0f));
-      m_inspectorPanel->setRoughness(0.5f);
-      m_inspectorPanel->setMetallic(0.0f);
-      m_inspectorPanel->setTransmission(0.0f);
-      m_inspectorPanel->setIOR(1.5f);
+    if (m_hierarchyPanel) {
+        m_hierarchyPanel->setSelectedIndex(index);
     }
-  }
 
-  if (m_uiManager) {
-    m_uiManager->markDirty();
-  }
+    if (m_inspectorPanel) {
+        auto renderer = static_cast<VulkanRenderer *>(m_renderer.get());
+        auto &sceneMeshes = renderer->getSceneMeshes();
+
+        if (m_selectedMeshIndex >= 0 && m_selectedMeshIndex < sceneMeshes.size() &&
+            sceneMeshes[m_selectedMeshIndex]) {
+            auto &mesh = sceneMeshes[m_selectedMeshIndex];
+            m_inspectorPanel->setTargetObject(mesh->getName());
+
+            glm::mat4 modelMat = mesh->getModelMatrix();
+            glm::vec3 currentPos = glm::vec3(modelMat[3]);
+            glm::vec3 currentScale(glm::length(modelMat[0]), glm::length(modelMat[1]),
+                                   glm::length(modelMat[2]));
+
+            glm::mat3 rotMat(
+                modelMat[0] / (currentScale.x != 0.0f ? currentScale.x : 1.0f),
+                modelMat[1] / (currentScale.y != 0.0f ? currentScale.y : 1.0f),
+                modelMat[2] / (currentScale.z != 0.0f ? currentScale.z : 1.0f));
+            glm::vec3 currentRot =
+                glm::degrees(glm::eulerAngles(glm::quat_cast(rotMat)));
+
+            m_inspectorPanel->setPositionValues(currentPos);
+            m_inspectorPanel->setRotationValues(currentRot);
+            m_inspectorPanel->setScaleValues(currentScale);
+
+            uint32_t materialId = mesh->getMaterialId();
+            auto &material = renderer->getGlobalMaterials()[materialId];
+
+            m_inspectorPanel->setMaterialColorValues(material.gpuData.albedoFactor);
+            m_inspectorPanel->setRoughness(material.gpuData.roughnessFactor);
+            m_inspectorPanel->setMetallic(material.gpuData.metallicFactor);
+            m_inspectorPanel->setTransmission(material.gpuData.transmissionFactor);
+            m_inspectorPanel->setIOR(material.gpuData.ior);
+
+        } else {
+            // deselect
+            m_inspectorPanel->setTargetObject("None");
+            m_inspectorPanel->setPositionValues(glm::vec3(0.0f));
+            m_inspectorPanel->setRotationValues(glm::vec3(0.0f));
+            m_inspectorPanel->setScaleValues(glm::vec3(1.0f));
+
+            m_inspectorPanel->setMaterialColorValues(glm::vec4(1.0f));
+            m_inspectorPanel->setRoughness(0.5f);
+            m_inspectorPanel->setMetallic(0.0f);
+            m_inspectorPanel->setTransmission(0.0f);
+            m_inspectorPanel->setIOR(1.5f);
+        }
+    }
+
+    if (m_uiManager) {
+        m_uiManager->markDirty();
+    }
 }
 
 void Engine::mainLoop() {
