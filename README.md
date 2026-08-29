@@ -27,7 +27,6 @@ slate engine is a cross-platform, open source, 3d, fully featured game engine bu
 
 # future features:
 
-* hierarchy panel
 * scene saving
 * physics
 * scriptable objects
@@ -51,6 +50,3 @@ no generative ai or LLMs were used to write or debug any of this code
 ---
 
 created by **swedishsplidney** for hack club stardance 2026
-
-
-
