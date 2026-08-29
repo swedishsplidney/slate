@@ -71,7 +71,7 @@ to build it, just run the following commands in your terminal of choice:
 ```bash
 git clone https://github.com/swedishsplidney/slate
 
-cd slate-engine
+cd slate
 
 mkdir build && cd build
 
