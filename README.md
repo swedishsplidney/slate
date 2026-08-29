@@ -1,3 +1,21 @@
+```text
+                                                 ppppppppppppppp           
+                ZZZZZZ                  ZZZ     pppppppppppppppp           
+                    ZZ                  ZZZ    pppppppppppppppp            
+       ZZZZZZZZ     ZZ       ZZZZZZY ZZZZZZZZZZppw      pppppp             
+       ZZ    OOO    ZZ      ZZ    ZZ,   ZZZ   ppf  pppp  pppp|             
+       ZZZZZZZ      ZZ       ZZZZZZZ3   ZZZ  ppp         Oppp              
+             ZZZ    ZZ     ZZZ    ZZ3   ZZZ  ppp   ppppppppp               
+       ZZ    ZZZ    ZZZ    ZZZ   XZZ3   ZZZ ppppp  pppp  pp                
+        ZZZZZZQ      XZZZZZ WZZZZ ZZ3     Z    ppp      ppp                
+                                          :ppppppppppppppp                      
+                                                          _          
+                                            ___ _ _  __ _(_)_ _  ___ 
+                                           / -_) ' \/ _` | | ' \/ -_)
+                                           \___|_||_\__, |_|_||_\___|
+                                                    |___/  
+```
+
 # slate engine
 
 slate engine is a cross-platform, open source, 3d, fully featured game engine built using c++ and vulkan/sdl3.
@@ -51,3 +69,6 @@ no generative ai or LLMs were used to write or debug any of this code
 ---
 
 created by **swedishsplidney** for hack club stardance 2026
+
+
+
