@@ -66,7 +66,7 @@ no premade binaries are available yet, but you can easily build it from source:
 
 ### build and run:
 
-to build it, just run the following commands in your terminal of choice!
+to build it, just run the following commands in your terminal of choice:
 
 ```bash
 git clone https://github.com/swedishsplidney/slate
