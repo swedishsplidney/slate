@@ -1,9 +1,9 @@
 # slate engine
 
-![C++](https://img.shields.io/badge/c%2B%2B-%2300599C.svg?style=for-the-badge&logo=cplusplus&logoColor=white)
+![C++](https://img.shields.io/badge/c%2B%2B_20-%2300599C.svg?style=for-the-badge&logo=cplusplus&logoColor=white)
 ![Vulkan API](https://img.shields.io/badge/Vulkan-%23AC162C.svg?style=for-the-badge&logo=vulkan&logoColor=white&logoSize=auto)
 ![SDL3](https://img.shields.io/badge/SDL3-%2314385C.svg?style=for-the-badge&logo=sdl&logoColor=white)
-![GLM](https://img.shields.io/badge/GLM-Mathematics-%23FFB13B.svg?style=for-the-badge)
+![GLM](https://img.shields.io/badge/GLM-%23FFB13B.svg?style=for-the-badge)
 ![CMake](https://img.shields.io/badge/CMake-%23008FBA.svg?style=for-the-badge&logo=cmake&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-%23FCC624.svg?style=for-the-badge&logo=linux&logoColor=black)
 ![windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
