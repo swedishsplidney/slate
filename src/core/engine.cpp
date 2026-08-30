@@ -129,6 +129,11 @@ Engine::Engine() {
   auto mainDockSpace = std::make_shared<UIDockSpace>(
       "MainDockSpace", glm::vec2(0.0f), glm::vec2(m_width, m_height));
 
+  // viewport
+  m_viewportPanel = std::make_shared<UIElement>(
+      "ViewportPanel", glm::vec2(0.0f), glm::vec2(0.0f));
+  mainDockSpace->addDockedChild(m_viewportPanel, DockSlot::Center, 0.0f);
+
   // top bar
   auto menuBar = std::make_shared<UIMenuBar>("MainMenuBar", glm::vec2(0.0f),
                                              glm::vec2(0.0f));
@@ -304,11 +309,6 @@ Engine::Engine() {
   bottomBar->setDrawsBackground(true);
   bottomBar->setColor(glm::vec4(0.008f, 0.009f, 0.011f, 1.0f));
   mainDockSpace->addDockedChild(bottomBar, DockSlot::BottomBar, 25.0f);
-
-  // viewport
-  m_viewportPanel = std::make_shared<UIElement>(
-      "ViewportPanel", glm::vec2(0.0f), glm::vec2(0.0f));
-  mainDockSpace->addDockedChild(m_viewportPanel, DockSlot::Center, 0.0f);
 
   m_uiManager->setRootElement(mainDockSpace);
   m_uiManager->markDirty();

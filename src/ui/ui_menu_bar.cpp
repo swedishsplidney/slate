@@ -103,7 +103,7 @@ namespace slate {
             float dropdownHeight = m_menus[m_activeMenuIndex].items.size() * 25.0f;
 
             uint16_t baseIndex = static_cast<uint16_t>(vertices.size());
-            glm::vec4 popupColor(0.025f, 0.025f, 0.028f, 0.95f);
+            glm::vec4 popupColor(0.016f, 0.018f, 0.023f, 0.95f);
 
             vertices.push_back(UIVertex{.pos = glm::vec2(dropdownX, dropdownY), .color = popupColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(dropdownX + dropdownWidth, dropdownY), .color = popupColor, .uv = glm::vec2(-1.0f)});
