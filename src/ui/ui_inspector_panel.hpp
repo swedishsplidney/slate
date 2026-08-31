@@ -3,6 +3,7 @@
 #include "ui/ui_dropdown.hpp"
 #include "ui/ui_input_box.hpp"
 #include "ui/ui_button.hpp"
+#include "ui/ui_color_picker.hpp"
 #include "resources/font_loader.hpp"
 #include <functional>
 #include <memory>
@@ -61,7 +62,7 @@ namespace slate {
         std::shared_ptr<UIInputBox> m_rotInputBoxes[3];
         std::shared_ptr<UIInputBox> m_sclInputBoxes[3];
 
-        std::shared_ptr<UIInputBox> m_matColorInputBoxes[3];
+        std::shared_ptr<UIColorPicker> m_colorPicker;
         std::shared_ptr<UIInputBox> m_matFloatInputBoxes[4];
 
         std::function<void(float, float, float)> m_onPositionChanged;

@@ -1,12 +1,12 @@
-# Slate Engine Vulkan rendering system
+# Slate Engine vulkan rendering system
 
-Architecture & Engine API Information
+Architecture & engine API information
 
 ---
 
 ## Architectural Overview
 
-Slate Engine's Vulkan rendering system is a high-performance, cross-platform, multi-pass, hardware-accelerated rendering architecture built on Vulkan 1.3 and SDL3. Engineered for strict predictable behavior, minimal CPU latency, and direct-mapped buffer operations, the renderer abstracts complex, boring, Vulkan stuff behind a virtual interface (`slate::Renderer`) while still maintaining low-level hardware performance.
+Slate Engine's Vulkan rendering system is a high-performance, cross-platform, multi-pass, hardware-accelerated rendering architecture built on Vulkan 1.3 and SDL3. it was engineered for strict predictable behavior, minimal CPU latency, and direct-mapped buffer operations. the renderer abstracts complex, boring, Vulkan stuff behind a virtual interface (`slate::Renderer`) while still maintaining low-level hardware performance.
 
 The renderer relies on strict multi-pass synchronization, mapped UBO and SSBO memory layouts for zero-copy CPU to GPU streaming, bindless descriptor indexing, and direct SDL3 integration.
 

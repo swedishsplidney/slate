@@ -1,5 +1,6 @@
 #include "ui_inspector_panel.hpp"
 #include "ui/ui_input_box.hpp"
+#include "ui/ui_color_picker.hpp"
 #include <iostream>
 #include <algorithm>
 
@@ -114,50 +115,25 @@ namespace slate {
         materialDropdown->setOnToggle([this](bool) { updateChildLayouts(); });
         addChild(materialDropdown);
 
-        auto createMatInputRow = [&](float rowY, float defaultVal, std::function<void(float, int)> callback, std::shared_ptr<UIInputBox> outBoxes[]) {
-            for (int i = 0; i < 3; ++i) {
-                float fx = startX + (i * (fieldWidth + 4.0f));
-                auto inputBox = std::make_shared<UIInputBox>(
-                    "MatInputBox_" + std::to_string(i),
-                    glm::vec2(fx, rowY),
-                    glm::vec2(fieldWidth, 22.0f),
-                    defaultVal
-                );
-                inputBox->setFontLoader(m_fontLoader);
-                inputBox->setDrawsBackground(true);
-                inputBox->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
+        float fullFieldX = 50.0f;
+        float fullFieldWidth = sectionWidth - 60.0f;
 
-                std::weak_ptr<UIInputBox> weakBox = inputBox;
-                inputBox->setOnValueChanged([callback, i, weakBox](float val) {
-                    float clamped = std::clamp(val, 0.0f, 1.0f);
-                    if (clamped != val) {
-                        if (auto box = weakBox.lock()) {
-                            box->setValueWithoutCallback(clamped);
-                        }
-                    }
-                    callback(clamped, i);
-                });
-                materialDropdown->addContentElement(inputBox);
+        auto colorPicker = std::make_shared<UIColorPicker>(
+            "MaterialColorPicker",
+            glm::vec2(fullFieldX, 25.0f),
+            glm::vec2(fullFieldWidth, 22.0f)
+        );
+        colorPicker->setFontLoader(m_fontLoader);
 
-                if (outBoxes) {
-                    outBoxes[i] = inputBox;
-                }
-            }
-        };
-
-        createMatInputRow(25.0f, 1.0f, [this](float val, int idx) {
-            if (idx == 0) m_materialColorValues.r = val;
-            else if (idx == 1) m_materialColorValues.g = val;
-            else if (idx == 2) m_materialColorValues.b = val;
-            m_materialColorValues.a = 1.0f;
-
+        colorPicker->setOnColorChanged([this](const glm::vec4& col) {
+            m_materialColorValues = col;
             if (m_onMaterialVec4Changed) {
                 m_onMaterialVec4Changed(0, m_materialColorValues);
             }
-        }, m_matColorInputBoxes);
+        });
 
-        float fullFieldX = 50.0f;
-        float fullFieldWidth = sectionWidth - 60.0f;
+        materialDropdown->addContentElement(colorPicker);
+        m_colorPicker = colorPicker;
 
         float floatRowY[4] = { 75.0f, 125.0f, 175.0f, 225.0f };
         float defaultFloatVals[4] = { 0.5f, 0.0f, 1.5f, 0.0f };
@@ -360,9 +336,9 @@ namespace slate {
 
     void UIInspectorPanel::setMaterialColorValues(const glm::vec4& color) {
         m_materialColorValues = color;
-        if (m_matColorInputBoxes[0]) m_matColorInputBoxes[0]->setValueWithoutCallback(color.r);
-        if (m_matColorInputBoxes[1]) m_matColorInputBoxes[1]->setValueWithoutCallback(color.g);
-        if (m_matColorInputBoxes[2]) m_matColorInputBoxes[2]->setValueWithoutCallback(color.b);
+        if (m_colorPicker) {
+            m_colorPicker->setColorValue(color);
+        }
     }
 
     void UIInspectorPanel::setRoughness(float val) {

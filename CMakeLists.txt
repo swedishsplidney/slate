@@ -79,6 +79,8 @@ add_executable(slate
         src/ui/ui_hierarchy_panel.hpp
         src/ui/ui_scrollable_container.cpp
         src/ui/ui_scrollable_container.hpp
+        src/ui/ui_color_picker.cpp
+        src/ui/ui_color_picker.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})

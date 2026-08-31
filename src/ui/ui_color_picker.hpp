@@ -1,0 +1,33 @@
+#pragma once
+#include "ui/ui_element.hpp"
+#include "ui/ui_input_box.hpp"
+#include "resources/font_loader.hpp"
+#include <functional>
+#include <memory>
+#include <glm/glm.hpp>
+
+namespace slate {
+    class UIColorPicker : public UIElement {
+    public:
+        UIColorPicker(const std::string& name, glm::vec2 position, glm::vec2 size);
+
+        void onEvent(const SDL_Event& event) override;
+        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override;
+
+        void setColorValue(const glm::vec4& color);
+        const glm::vec4& getColorValue() const { return m_color; }
+
+        void setFontLoader(std::shared_ptr<FontLoader> fontLoader) { m_fontLoader = fontLoader; }
+        void setOnColorChanged(std::function<void(const glm::vec4&)> cb) { m_onColorChanged = cb; }
+
+    private:
+        void updatePopupLayout();
+
+        glm::vec4 m_color{1.0f};
+        bool m_isOpen = false;
+
+        std::shared_ptr<FontLoader> m_fontLoader;
+        std::shared_ptr<UIInputBox> m_rgbInputBoxes[3];
+        std::function<void(const glm::vec4&)> m_onColorChanged;
+    };
+}
