@@ -132,6 +132,10 @@ namespace slate {
             }
         });
 
+        colorPicker->setOnLayoutChanged([this]() {
+            updateChildLayouts();
+        });
+
         materialDropdown->addContentElement(colorPicker);
         m_colorPicker = colorPicker;
 
@@ -306,7 +310,23 @@ namespace slate {
             float materialPosY = transformDropdown->getPosition().y + transformHeight + 8.0f;
 
             materialDropdown->setPosition(glm::vec2(8.0f, materialPosY));
-            materialDropdown->setSize(glm::vec2(panelWidth - 16.0f, materialDropdown->getSize().y));
+
+            float baseMaterialContentHeight = 270.0f;
+            float colorPickerExtraH = 0.0f;
+            if (m_colorPicker && m_colorPicker->isOpen()) {
+                colorPickerExtraH = 195.0f;
+                baseMaterialContentHeight += colorPickerExtraH;
+            }
+
+            materialDropdown->setSize(glm::vec2(panelWidth - 16.0f, baseMaterialContentHeight));
+
+            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? 195.0f + 12.0f : 0.0f;
+            float defaultFloatY[4] = { 75.0f, 125.0f, 175.0f, 225.0f };
+            for (int i = 0; i < 4; ++i) {
+                if (m_matFloatInputBoxes[i]) {
+                    m_matFloatInputBoxes[i]->setPosition(glm::vec2(m_matFloatInputBoxes[i]->getPosition().x, defaultFloatY[i] + matOffset));
+                }
+            }
 
             float materialHeight = materialDropdown->isExpanded() ? materialDropdown->getSize().y : materialDropdown->getHeaderHeight();
             m_size.y = materialPosY + materialHeight + 10.0f;
