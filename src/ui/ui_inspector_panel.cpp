@@ -287,7 +287,7 @@ namespace slate {
 
         glm::vec2 matAbsPos = materialDropdown->getAbsolutePosition();
         if (materialDropdown->isExpanded()) {
-            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? 195.0f + 12.0f : 0.0f;
+            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? 195.0f + 75.0f : 0.0f;
             m_fontLoader->generateTextGeometry("Color", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 19.0f), dimTextColor, vertices, indices);
             m_fontLoader->generateTextGeometry("Roughness", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 69.0f + matOffset), dimTextColor, vertices, indices);
             m_fontLoader->generateTextGeometry("Metallic", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 119.0f + matOffset), dimTextColor, vertices, indices);
@@ -312,7 +312,7 @@ namespace slate {
 
             materialDropdown->setPosition(glm::vec2(8.0f, materialPosY));
 
-            float baseMaterialContentHeight = 270.0f;
+            float baseMaterialContentHeight = 70.0f;
             float colorPickerExtraH = 0.0f;
             if (m_colorPicker && m_colorPicker->isOpen()) {
                 colorPickerExtraH = 195.0f;
@@ -321,7 +321,7 @@ namespace slate {
 
             materialDropdown->setSize(glm::vec2(panelWidth - 16.0f, baseMaterialContentHeight));
 
-            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? 195.0f + 12.0f : 0.0f;
+            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? 195.0f + 75.0f : 0.0f;
             float defaultFloatY[4] = { 75.0f, 125.0f, 175.0f, 225.0f };
             for (int i = 0; i < 4; ++i) {
                 if (m_matFloatInputBoxes[i]) {

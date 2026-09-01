@@ -27,10 +27,18 @@ namespace slate {
     private:
         void rebuildPopupElements();
         void updateInputBoxes();
+        void updateColorFromHSV();
+
+        glm::vec3 rgbToHsv(const glm::vec3& rgb) const;
+        glm::vec3 hsvToRgb(const glm::vec3& hsv) const;
 
         glm::vec4 m_color{1.0f};
+        glm::vec3 m_hsv{0.0f, 1.0f, 1.0f};
         glm::vec4 m_cmykValues{0.0f};
         bool m_isOpen = false;
+
+        bool m_draggingSV = false;
+        bool m_draggingHue = false;
 
         std::shared_ptr<FontLoader> m_fontLoader;
         std::shared_ptr<UIInputBox> m_rgbInputBoxes[3];
