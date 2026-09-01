@@ -287,11 +287,12 @@ namespace slate {
 
         glm::vec2 matAbsPos = materialDropdown->getAbsolutePosition();
         if (materialDropdown->isExpanded()) {
+            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? 195.0f + 12.0f : 0.0f;
             m_fontLoader->generateTextGeometry("Color", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 19.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Roughness", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 69.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Metallic", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 119.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("IOR", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 169.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Transmission", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 219.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Roughness", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 69.0f + matOffset), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Metallic", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 119.0f + matOffset), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("IOR", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 169.0f + matOffset), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Transmission", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 219.0f + matOffset), dimTextColor, vertices, indices);
         }
     }
 

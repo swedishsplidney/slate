@@ -26,8 +26,10 @@ namespace slate {
 
     private:
         void rebuildPopupElements();
+        void updateInputBoxes();
 
         glm::vec4 m_color{1.0f};
+        glm::vec4 m_cmykValues{0.0f};
         bool m_isOpen = false;
 
         std::shared_ptr<FontLoader> m_fontLoader;
