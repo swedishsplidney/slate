@@ -47,6 +47,8 @@ namespace slate {
         void setOnMaterialVec4Changed(std::function<void(int, const glm::vec4&)> cb) { m_onMaterialVec4Changed = cb; }
         void setOnMaterialFloatChanged(std::function<void(int, float)> cb) { m_onMaterialFloatChanged = cb; }
 
+        void setOnLayoutChanged(std::function<void()> cb) { m_onLayoutChanged = cb; }
+
     private:
         void updateChildLayouts();
 
@@ -71,5 +73,7 @@ namespace slate {
 
         std::function<void(int, const glm::vec4&)> m_onMaterialVec4Changed;
         std::function<void(int, float)> m_onMaterialFloatChanged;
+
+        std::function<void()> m_onLayoutChanged;
     };
 }

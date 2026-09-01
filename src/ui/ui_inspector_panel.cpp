@@ -134,6 +134,9 @@ namespace slate {
 
         colorPicker->setOnLayoutChanged([this]() {
             updateChildLayouts();
+            if (m_onLayoutChanged) {
+                m_onLayoutChanged();
+            }
         });
 
         materialDropdown->addContentElement(colorPicker);
@@ -312,10 +315,9 @@ namespace slate {
 
             materialDropdown->setPosition(glm::vec2(8.0f, materialPosY));
 
-            float baseMaterialContentHeight = 370.0f;
-            float colorPickerExtraH = 0.0f;
+            float baseMaterialContentHeight = 290.0f;
+            float colorPickerExtraH = 270.0f;
             if (m_colorPicker && m_colorPicker->isOpen()) {
-                colorPickerExtraH = 195.0f;
                 baseMaterialContentHeight += colorPickerExtraH;
             }
 

@@ -108,7 +108,7 @@ namespace slate {
             float initialVal = (i == 0) ? m_color.r : (i == 1) ? m_color.g : m_color.b;
             auto inputBox = std::make_shared<UIInputBox>(
                 "RGBInput_" + std::to_string(i),
-                glm::vec2(fx, 130.0f),
+                glm::vec2(fx, 150.0f),
                 glm::vec2(fieldWidthRGB, 22.0f),
                 initialVal
             );
@@ -141,7 +141,7 @@ namespace slate {
             float fx = 8.0f + (i * (fieldWidthCMYK + 4.0f));
             auto inputBox = std::make_shared<UIInputBox>(
                 "CMYKInput_" + std::to_string(i),
-                glm::vec2(fx, 178.0f),
+                glm::vec2(fx, 198.0f),
                 glm::vec2(fieldWidthCMYK, 22.0f),
                 m_cmykValues[i]
             );
@@ -179,7 +179,7 @@ namespace slate {
         int initHex = ((int)(m_color.r * 255) << 16) | ((int)(m_color.g * 255) << 8) | (int)(m_color.b * 255);
         auto hexBox = std::make_shared<UIInputBox>(
             "HexInput",
-            glm::vec2(8.0f, 226.0f),
+            glm::vec2(8.0f, 246.0f),
             glm::vec2(popupWidth - 16.0f, 22.0f),
             (float)initHex
         );

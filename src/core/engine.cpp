@@ -219,6 +219,12 @@ Engine::Engine() {
   m_inspectorPanel->setDrawsBackground(true);
   m_inspectorPanel->setColor(glm::vec4(0.008f, 0.015f, 0.016f, 0.1f));
 
+  m_inspectorPanel->setOnLayoutChanged([this]() {
+      if (m_uiManager) {
+             m_uiManager->markDirty();
+      }
+  });
+
   m_inspectorPanel->setOnPositionChanged([this](float x, float y, float z) {
       m_commandRegistry->execute(
           "editor.set_position", m_commandContext,
