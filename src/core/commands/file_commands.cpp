@@ -81,6 +81,8 @@ namespace slate {
                 isTransparent
             );
 
+            newMesh->setPath(m_filePath);
+
             m_importedMeshId = context.renderer->addMeshToScene(std::move(newMesh));
         }
 

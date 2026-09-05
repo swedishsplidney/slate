@@ -7,6 +7,8 @@
 #include "core/commands/set_position_commands.hpp"
 #include "core/commands/set_rotation_commands.hpp"
 #include "core/commands/translate_commands.hpp"
+#include "core/commands/save_scene_command.hpp"
+#include "core/commands/load_scene_command.hpp"
 #include "renderer/vulkan/vulkan_renderer.hpp"
 #include "resources/mesh_loader.hpp"
 #include "ui/ui_button.hpp"
@@ -154,18 +156,20 @@ Engine::Engine() {
 
   menuBar->setOnCommandTriggered([this](const std::string &commandId) {
     bool success = m_commandRegistry->execute(commandId, m_commandContext);
-        if (success && commandId == "file.import_mesh") {
-            updateHierarchyItems();
-            if (m_uiManager) {
-                m_uiManager->markDirty();
-            }
-        }
+      if (success && (commandId == "file.import_mesh" || commandId == "file.load_scene")) {
+          updateHierarchyItems();
+          if (m_uiManager) {
+              m_uiManager->markDirty();
+          }
+      }
   });
 
   MenuHeader fileMenu{"File",
-                      {{"Import Mesh...", "file.import_mesh", "Ctrl+I"},
-                       {"", "", "", true},
-                       {"Exit", "engine.exit", "Alt+F4"}}};
+                    {{"Import Mesh...", "file.import_mesh", "Ctrl+I"},
+                     {"Save Scene...", "file.save_scene", "Ctrl+S"},
+                     {"Load Scene...", "file.load_scene", "Ctrl+O"},
+                     {"", "", "", true},
+                     {"Exit", "engine.exit", "Alt+F4"}}};
 
   MenuHeader editMenu{
       "Edit",
@@ -446,6 +450,18 @@ void Engine::registerDefaultCommands() {
                       std::stof(args[4]), std::stof(args[5]));
         return std::make_unique<UpdateMaterialCommand>(m_selectedMeshIndex,
                                                        matId, prop, val);
+      });
+
+    m_commandRegistry->registerCommand(
+      "file.save_scene", [](const CommandRegistry::CommandArgs &args) {
+        std::string path = args.empty() ? "scene.slate" : args[0];
+        return std::make_unique<SaveSceneCommand>(path);
+      });
+
+    m_commandRegistry->registerCommand(
+      "file.load_scene", [](const CommandRegistry::CommandArgs &args) {
+        std::string path = args.empty() ? "scene.slate" : args[0];
+        return std::make_unique<LoadSceneCommand>(path);
       });
 }
 
@@ -745,6 +761,22 @@ void Engine::mainLoop() {
             event.key.scancode == SDL_SCANCODE_G) {
           m_commandRegistry->execute("editor.translate_mesh", m_commandContext);
         }
+      }
+
+      // ctrl s
+      if ((event.key.mod & SDL_KMOD_CTRL) &&
+        event.key.scancode == SDL_SCANCODE_S) {
+        m_commandRegistry->execute("file.save_scene", m_commandContext, {"scene.slate"});
+        std::cout << "[editor] scene saved via shortcut!\n";
+        }
+
+      // ctrl o (load)
+      if (event.type == SDL_EVENT_KEY_DOWN && event.key.repeat == 0) {
+        if ((event.key.mod & SDL_KMOD_CTRL) &&
+            event.key.scancode == SDL_SCANCODE_O) {
+          m_commandRegistry->execute("file.load_scene", m_commandContext, {});
+          std::cout << "[editor] Open scene dialog triggered via shortcut!\n";
+            }
       }
 
       // capture mouse position and viewport bounds on press
@@ -1073,4 +1105,4 @@ void Engine::cleanup() {
   SDL_Quit();
 }
 
-} // namespace slate
+}

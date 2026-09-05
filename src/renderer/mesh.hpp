@@ -55,6 +55,9 @@ namespace slate {
 
         void setTransparent(bool transparent) { m_transparent = transparent; }
 
+        void setPath(const std::string& path) { m_filePath = path; }
+        const std::string& getPath() const { return m_filePath; }
+
     private:
         void createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices);
         void createIndexBuffer(VkPhysicalDevice physicalDevice, const std::vector<uint16_t>& indices);
@@ -78,6 +81,8 @@ namespace slate {
 
         std::vector<Vertex> m_vertices;
         std::vector<uint16_t> m_indices;
+
+        std::string m_filePath;
     };
 
 }

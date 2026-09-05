@@ -81,6 +81,11 @@ namespace slate {
             }
         }
 
+        void clearScene() {
+            m_sceneMeshes.clear();
+            m_globalMaterials.clear();
+        }
+
         void popGlobalMaterials(size_t count) {
             if (count <= m_globalMaterials.size()) {
                 m_globalMaterials.erase(m_globalMaterials.end() - count, m_globalMaterials.end());

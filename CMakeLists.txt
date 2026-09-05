@@ -83,6 +83,10 @@ add_executable(slate
         src/ui/ui_color_picker.hpp
         src/core/serializer.cpp
         src/core/serializer.hpp
+        src/core/commands/save_scene_command.cpp
+        src/core/commands/save_scene_command.hpp
+        src/core/commands/load_scene_command.cpp
+        src/core/commands/load_scene_command.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
