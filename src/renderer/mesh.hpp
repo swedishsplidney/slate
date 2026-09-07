@@ -112,16 +112,19 @@ namespace slate {
                 JPH::BodyLockWrite lock(m_physicsSystem->GetBodyLockInterface(), m_bodyID);
                 if (lock.Succeeded()) {
                     JPH::Body& body = lock.GetBody();
-                    if (!body.IsStatic()) {
+                    if (body.GetMotionType() == JPH::EMotionType::Dynamic) {
                         if (body.GetMotionProperties()) {
                             body.GetMotionProperties()->ScaleToMass(value);
                         }
                     } else {
-                        std::cout << "[physics warning] Cannot change mass of a static body.\n";
+                        std::cout << "[physics warning] Cannot change mass of a non-dynamic body.\n";
                     }
                 }
             }
         }
+
+
+        JPH::PhysicsSystem* getPhysicsSystem() const { return m_physicsSystem; }
 
     private:
         void createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices);

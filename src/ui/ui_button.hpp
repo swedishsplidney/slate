@@ -20,7 +20,15 @@ namespace slate {
 
             if (!m_text.empty() && m_fontLoader) {
                 glm::vec2 absPos = getAbsolutePosition();
-                glm::vec2 textPos = glm::vec2(absPos.x + 10.0f, absPos.y + 15.0f);
+
+                float approxCharWidth = 7.0f;
+                float textWidth = static_cast<float>(m_text.length()) * approxCharWidth;
+
+                // centering
+                float textX = absPos.x + (m_size.x - textWidth) * 0.5f;
+                float textY = absPos.y + (m_size.y * 0.5f) + 4.0f;
+
+                glm::vec2 textPos = glm::vec2(textX, textY);
                 glm::vec4 textColor(0.9f, 0.9f, 0.95f, 1.0f);
                 m_fontLoader->generateTextGeometry(m_text, textPos, textColor, vertices, indices);
             }

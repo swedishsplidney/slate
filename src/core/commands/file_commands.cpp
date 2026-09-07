@@ -7,9 +7,13 @@
 #include "physics/collider_generator.hpp"
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/Body.h>
+#include <json.hpp>
 
 #include <iostream>
+#include <fstream>
 #include <filesystem>
+
+namespace fs = std::filesystem;
 
 namespace slate {
 
@@ -96,21 +100,46 @@ namespace slate {
                     JPH::ShapeRefC shape = shapeResult.Get();
                     glm::vec3 initialPos = glm::vec3(newMesh->getModelMatrix()[3]);
 
+                    JPH::EMotionType motionType = JPH::EMotionType::Dynamic;
+                    uint8_t objectLayer = slate::Layers::MOVING;
+
+                    fs::path jsonPath = path;
+                    jsonPath.replace_extension(".json");
+
+                    if (fs::exists(jsonPath)) {
+                        std::ifstream file(jsonPath);
+                        if (file.is_open()) {
+                            nlohmann::json j;
+                            try {
+                                file >> j;
+                                if (j.contains("physics") && j["physics"].is_object()) {
+                                    int typeVal = j["physics"].value("bodyType", 2);
+                                    motionType = static_cast<JPH::EMotionType>(typeVal);
+
+                                    if (motionType == JPH::EMotionType::Static) {
+                                        objectLayer = slate::Layers::NON_MOVING;
+                                    }
+                                }
+                            } catch (...) {
+                            }
+                        }
+                    }
+
                     JPH::BodyCreationSettings bodySettings(
                         shape,
-                        JPH::RVec3(initialPos.x, initialPos.y, initialPos.y),
+                        JPH::RVec3(initialPos.x, initialPos.y, initialPos.z), // Fixed initialPos.y typo here!
                         JPH::Quat::sIdentity(),
-                        JPH::EMotionType::Dynamic,
-                        slate::Layers::MOVING
+                        motionType,
+                        objectLayer
                     );
 
                     auto& bodyInterface = context.physicsEngine->getPhysicsSystem().GetBodyInterface();
                     JPH::Body* body = bodyInterface.CreateBody(bodySettings);
 
                     if (body) {
-                        bodyInterface.AddBody(body->GetID(), JPH::EActivation::Activate);
+                        bodyInterface.AddBody(body->GetID(), motionType == JPH::EMotionType::Static ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
                         newMesh->setBodyID(body->GetID());
-                        std::cout << "[physics] created convex hull rigid body for mesh: " << path.filename().string() << "\n";
+                        std::cout << "[physics] created rigid body for mesh: " << path.filename().string() << " with motion type: " << static_cast<int>(motionType) << "\n";
                     }
                 } else {
                     std::cerr << "[physics error] failed to generate optimal collider shape for mesh.\n";

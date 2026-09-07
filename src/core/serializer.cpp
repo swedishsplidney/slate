@@ -69,6 +69,29 @@ namespace slate {
                 file << "transmission = " << mat.gpuData.transmissionFactor << "\n";
             }
 
+            // physics
+            if (mesh->getBodyID().IsInvalid() == false && mesh->getPhysicsSystem() != nullptr) {
+                auto& bodyInterface = mesh->getPhysicsSystem()->GetBodyInterface();
+                JPH::BodyID bodyId = mesh->getBodyID();
+
+                file << "[entity.physics]\n";
+                file << "motion_type = " << static_cast<int>(bodyInterface.GetMotionType(bodyId)) << "\n";
+                file << "friction = " << bodyInterface.GetFriction(bodyId) << "\n";
+                file << "restitution = " << bodyInterface.GetRestitution(bodyId) << "\n";
+                file << "gravity_factor = " << bodyInterface.GetGravityFactor(bodyId) << "\n";
+
+                float mass = 1.0f;
+                JPH::BodyLockRead lock(mesh->getPhysicsSystem()->GetBodyLockInterface(), bodyId);
+                if (lock.Succeeded()) {
+                    const JPH::Body& body = lock.GetBody();
+                    if (body.IsDynamic() && body.GetMotionProperties() != nullptr) {
+                        float invMass = body.GetMotionProperties()->GetInverseMass();
+                        if (invMass > 0.0f) mass = 1.0f / invMass;
+                    }
+                }
+                file << "mass = " << mass << "\n";
+            }
+
             file << "\n";
         }
 
@@ -127,6 +150,9 @@ namespace slate {
         glm::vec4 albedo(1.0f);
         float roughness = 0.5f, metallic = 0.0f, ior = 1.5f, transmission = 0.0f;
         bool hasEntity = false;
+        float friction = 0.5f, restitution = 0.2f, gravityFactor = 1.0f, mass = 1.0f;
+        int motionTypeInt = 2;
+        bool hasPhysics = false;
 
         auto spawnEntity = [&]() {
             if (currentMeshPath.empty()) return;
@@ -175,6 +201,17 @@ namespace slate {
                 newMesh->setModelMatrix(model);
 
                 renderer->addMeshToScene(std::move(newMesh));
+
+                if (hasPhysics) {
+                    auto& addedMesh = renderer->getSceneMeshes().back();
+
+                    addedMesh->setPhysicsProperty("motionType", static_cast<float>(motionTypeInt));
+
+                    addedMesh->setPhysicsProperty("friction", friction);
+                    addedMesh->setPhysicsProperty("restitution", restitution);
+                    addedMesh->setPhysicsProperty("gravityFactor", gravityFactor);
+                    addedMesh->setPhysicsProperty("mass", mass);
+                }
             }
         };
 
@@ -197,6 +234,12 @@ namespace slate {
                 metallic = 0.0f;
                 ior = 1.5f;
                 transmission = 0.0f;
+                friction = 0.5f;
+                restitution = 0.2f;
+                gravityFactor = 1.0f;
+                mass = 1.0f;
+                motionTypeInt = 2;
+                hasPhysics = false;
             } else if (line.rfind("name = ", 0) == 0 && hasEntity && currentEntityName.empty()) {
                 size_t start = line.find('"');
                 size_t end = line.rfind('"');
@@ -225,6 +268,22 @@ namespace slate {
                 ior = std::stof(line.substr(line.find('=') + 1));
             } else if (line.rfind("transmission = ", 0) == 0) {
                 transmission = std::stof(line.substr(line.find('=') + 1));
+            }
+            else if (line.rfind("motion_type = ", 0) == 0) {
+                motionTypeInt = std::stoi(line.substr(line.find('=') + 1));
+                hasPhysics = true;
+            } else if (line.rfind("friction = ", 0) == 0) {
+                friction = std::stof(line.substr(line.find('=') + 1));
+                hasPhysics = true;
+            } else if (line.rfind("restitution = ", 0) == 0) {
+                restitution = std::stof(line.substr(line.find('=') + 1));
+                hasPhysics = true;
+            } else if (line.rfind("gravity_factor = ", 0) == 0) {
+                gravityFactor = std::stof(line.substr(line.find('=') + 1));
+                hasPhysics = true;
+            } else if (line.rfind("mass = ", 0) == 0) {
+                mass = std::stof(line.substr(line.find('=') + 1));
+                hasPhysics = true;
             }
         }
 

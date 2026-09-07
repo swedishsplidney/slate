@@ -2,6 +2,7 @@
 #include "translate_commands.hpp"
 #include "renderer/vulkan/vulkan_renderer.hpp"
 #include "ui/ui_manager.hpp"
+#include "physics/physics_engine.hpp"
 #include <iostream>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
@@ -26,8 +27,21 @@ namespace slate {
                 glm::decompose(modelMat, scale, orientation, translation, skew, perspective);
 
                 glm::vec3 localDelta = glm::inverse(orientation) * m_translationDelta;
-
                 mesh->translate(localDelta);
+
+                // jolt sync
+                if (context.physicsEngine && !mesh->getBodyID().IsInvalid()) {
+                    auto& bodyInterface = context.physicsEngine->getPhysicsSystem().GetBodyInterface();
+                    JPH::BodyID bodyId = mesh->getBodyID();
+
+                    glm::mat4 newModelMat = mesh->getModelMatrix();
+                    glm::decompose(newModelMat, scale, orientation, translation, skew, perspective);
+
+                    JPH::RVec3 joltPos(translation.x, translation.y, translation.z);
+                    JPH::Quat joltRot(orientation.x, orientation.y, orientation.z, orientation.w);
+
+                    bodyInterface.SetPositionAndRotation(bodyId, joltPos, joltRot, JPH::EActivation::Activate);
+                }
             }
         }
         if (context.uiManager) {
@@ -51,8 +65,21 @@ namespace slate {
                 glm::decompose(modelMat, scale, orientation, translation, skew, perspective);
 
                 glm::vec3 localDelta = glm::inverse(orientation) * m_translationDelta;
-
                 mesh->translate(-localDelta);
+
+                // jolt sync
+                if (context.physicsEngine && !mesh->getBodyID().IsInvalid()) {
+                    auto& bodyInterface = context.physicsEngine->getPhysicsSystem().GetBodyInterface();
+                    JPH::BodyID bodyId = mesh->getBodyID();
+
+                    glm::mat4 newModelMat = mesh->getModelMatrix();
+                    glm::decompose(newModelMat, scale, orientation, translation, skew, perspective);
+
+                    JPH::RVec3 joltPos(translation.x, translation.y, translation.z);
+                    JPH::Quat joltRot(orientation.x, orientation.y, orientation.z, orientation.w);
+
+                    bodyInterface.SetPositionAndRotation(bodyId, joltPos, joltRot, JPH::EActivation::Activate);
+                }
             }
         }
         if (context.uiManager) {

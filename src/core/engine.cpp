@@ -1211,7 +1211,8 @@ void Engine::mainLoop() {
               auto& sceneMeshes = vkRenderer->getSceneMeshes();
               auto& bodyInterface = m_physicsEngine->getPhysicsSystem().GetBodyInterface();
 
-              for (auto& mesh : sceneMeshes) {
+              for (size_t i = 0; i < sceneMeshes.size(); ++i) {
+                  auto& mesh = sceneMeshes[i];
                   if (mesh && !mesh->getBodyID().IsInvalid()) {
 
                       if (bodyInterface.GetMotionType(mesh->getBodyID()) == JPH::EMotionType::Static) {
@@ -1231,6 +1232,18 @@ void Engine::mainLoop() {
                                             glm::scale(glm::mat4(1.0f), mesh->getScale());
 
                       mesh->setModelMatrix(transform, false);
+
+                      if (static_cast<int>(i) == m_selectedMeshIndex && m_inspectorPanel) {
+                          m_inspectorPanel->setPositionValues(pos);
+
+                          // quat to euler
+                          glm::vec3 eulerAngles = glm::degrees(glm::eulerAngles(rot));
+                          m_inspectorPanel->setRotationValues(eulerAngles);
+
+                          if (m_uiManager) {
+                              m_uiManager->markDirty();
+                          }
+                      }
                   }
               }
           }

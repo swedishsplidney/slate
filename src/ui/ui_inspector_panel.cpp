@@ -193,7 +193,7 @@ namespace slate {
         auto physicsDropdown = std::make_shared<UIDropdown>(
             "PhysicsDropdown",
             glm::vec2(8.0f, 540.0f),
-            glm::vec2(panelWidth - 16.0f, 280.0f),
+            glm::vec2(panelWidth - 16.0f, 290.0f),
             "Physics",
             true
         );
