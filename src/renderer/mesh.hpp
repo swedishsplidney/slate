@@ -3,6 +3,7 @@
 #include "vertex.hpp"
 #include <vector>
 #include <string>
+#include <iostream>
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -73,6 +74,45 @@ namespace slate {
         void setPath(const std::string& path) { m_filePath = path; }
         const std::string& getPath() const { return m_filePath; }
 
+
+
+        void setPhysicsProperty(const std::string& propertyName, float value) {
+            if (!m_physicsSystem || m_bodyID.IsInvalid()) return;
+            auto& bodyInterface = m_physicsSystem->GetBodyInterface();
+
+            if (propertyName == "friction") {
+                bodyInterface.SetFriction(m_bodyID, value);
+            }
+            else if (propertyName == "restitution" || propertyName == "bounciness") {
+                bodyInterface.SetRestitution(m_bodyID, value);
+            }
+            else if (propertyName == "gravityFactor") {
+                bodyInterface.SetGravityFactor(m_bodyID, value);
+            }
+            else if (propertyName == "motionType" || propertyName == "bodyType") {
+                JPH::EMotionType motionType = JPH::EMotionType::Dynamic;
+                int typeInt = static_cast<int>(value);
+                if (typeInt == 0) motionType = JPH::EMotionType::Static;
+                else if (typeInt == 1) motionType = JPH::EMotionType::Kinematic;
+                else if (typeInt == 2) motionType = JPH::EMotionType::Dynamic;
+
+                bodyInterface.SetMotionType(m_bodyID, motionType, JPH::EActivation::Activate);
+            }
+            else if (propertyName == "mass") {
+                JPH::BodyLockWrite lock(m_physicsSystem->GetBodyLockInterface(), m_bodyID);
+                if (lock.Succeeded()) {
+                    JPH::Body& body = lock.GetBody();
+                    if (!body.IsStatic()) {
+                        if (body.GetMotionProperties()) {
+                            body.GetMotionProperties()->ScaleToMass(value);
+                        }
+                    } else {
+                        std::cout << "[physics warning] Cannot change mass of a static body.\n";
+                    }
+                }
+            }
+        }
+
     private:
         void createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices);
         void createIndexBuffer(VkPhysicalDevice physicalDevice, const std::vector<uint16_t>& indices);
@@ -109,9 +149,13 @@ namespace slate {
                 JPH::RVec3 joltPos(pos.x, pos.y, pos.z);
                 JPH::Quat joltRot(rot.x, rot.y, rot.z, rot.w);
 
+                if (bodyInterface.GetMotionType(m_bodyID) == JPH::EMotionType::Static) {
+                    bodyInterface.SetPositionAndRotation(m_bodyID, joltPos, joltRot, JPH::EActivation::DontActivate);
+                    return;
+                }
+
                 bodyInterface.SetPositionAndRotation(m_bodyID, joltPos, joltRot, JPH::EActivation::Activate);
 
-                // kill momentum
                 bodyInterface.SetLinearVelocity(m_bodyID, JPH::Vec3::sZero());
                 bodyInterface.SetAngularVelocity(m_bodyID, JPH::Vec3::sZero());
             }

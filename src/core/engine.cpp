@@ -192,15 +192,19 @@ Engine::Engine() {
   menuBar->addMenu(editMenu);
   menuBar->addMenu(viewMenu);
 
-  auto importButton = std::make_shared<UIButton>(
-      "importMeshBtn", glm::vec2(10.0f, 3.0f), glm::vec2(120.0f, 24.0f),
-      [this]() {
-        bool success = m_commandRegistry->execute("file.import_mesh", m_commandContext);
-            if (success) {
-                updateHierarchyItems();
-                m_uiManager->markDirty();
-            }
-      });
+    auto importButton = std::make_shared<UIButton>(
+     "importMeshBtn",
+     glm::vec2(10.0f, 3.0f),
+     glm::vec2(120.0f, 24.0f),
+     "Import Mesh",
+     [this]() {
+         bool success = m_commandRegistry->execute("file.import_mesh", m_commandContext);
+         if (success) {
+             updateHierarchyItems();
+             m_uiManager->markDirty();
+         }
+     }
+ );
 
   // left
   auto leftSidebarScroll = std::make_shared<UIScrollableContainer>(
@@ -304,6 +308,46 @@ Engine::Engine() {
               }
           }
       });
+
+    m_inspectorPanel->setOnPhysicsBodyTypeChanged([this](int type) {
+       m_commandRegistry->execute("physics.set_property", m_commandContext,
+           {"bodyType", std::to_string(type), "2.0f"});
+        if (m_uiManager) {
+            m_uiManager->markDirty();
+        }
+   });
+
+    m_inspectorPanel->setOnPhysicsMassChanged([this](float val) {
+        m_commandRegistry->execute("physics.set_property", m_commandContext,
+            {"mass", std::to_string(val), "1.0f"});
+        if (m_uiManager) {
+            m_uiManager->markDirty();
+        }
+    });
+
+    m_inspectorPanel->setOnPhysicsBouncinessChanged([this](float val) {
+        m_commandRegistry->execute("physics.set_property", m_commandContext,
+            {"bounciness", std::to_string(val), "0.5f"});
+        if (m_uiManager) {
+            m_uiManager->markDirty();
+        }
+    });
+
+    m_inspectorPanel->setOnPhysicsFrictionChanged([this](float val) {
+        m_commandRegistry->execute("physics.set_property", m_commandContext,
+            {"friction", std::to_string(val), "0.5f"});
+        if (m_uiManager) {
+            m_uiManager->markDirty();
+        }
+    });
+
+    m_inspectorPanel->setOnPhysicsGravityFactorChanged([this](float val) {
+        m_commandRegistry->execute("physics.set_property", m_commandContext,
+            {"gravityFactor", std::to_string(val), "1.0f"});
+        if (m_uiManager) {
+            m_uiManager->markDirty();
+        }
+    });
 
   m_hierarchyPanel = std::make_shared<UIHierarchyPanel>("HierarchyPanel", glm::vec2(0.0f), glm::vec2(0.0f, 200.0f));
   m_hierarchyPanel->setFontLoader(fontLoader);
@@ -474,6 +518,23 @@ void Engine::registerDefaultCommands() {
     "physics.toggle", [this](const CommandRegistry::CommandArgs &) {
       return std::make_unique<TogglePhysicsCommand>(m_physicsRunning);
     });
+
+  m_commandRegistry->registerCommand(
+  "physics.set_property", [this](const CommandRegistry::CommandArgs &args) -> std::unique_ptr<ICommand> {
+      if (args.size() < 2) return nullptr;
+      std::string propName = args[0];
+      float val = std::stof(args[1]);
+      float defaultVal = args.size() >= 3 ? std::stof(args[2]) : 1.0f;
+      auto renderer = static_cast<VulkanRenderer *>(m_renderer.get());
+      if (renderer && m_selectedMeshIndex >= 0 && m_selectedMeshIndex < renderer->getSceneMeshes().size()) {
+          auto &mesh = renderer->getSceneMeshes()[m_selectedMeshIndex];
+          if (mesh) {
+              auto sharedMesh = std::shared_ptr<Mesh>(mesh.get(), [](Mesh*){});
+              return std::make_unique<SetPhysicsPropertyCommand>(sharedMesh, propName, val, defaultVal);
+          }
+      }
+      return nullptr;
+  });
 }
 
 Engine::~Engine() { cleanup(); }
@@ -699,6 +760,37 @@ void Engine::setSelectedMeshIndex(int index) {
             m_inspectorPanel->setTransmission(material.gpuData.transmissionFactor);
             m_inspectorPanel->setIOR(material.gpuData.ior);
 
+            fs::path jsonPath(mesh->getPath());
+            jsonPath.replace_extension(".json");
+
+            float bodyType = 2.0f;
+            float mass = 1.0f;
+            float bounce = 0.5f;
+            float friction = 0.5f;
+            float gravity = 1.0f;
+
+            if (fs::exists(jsonPath)) {
+              std::ifstream file(jsonPath);
+              if (file.is_open()) {
+                nlohmann::json j;
+                file >> j;
+                if (j.contains("physics") && j["physics"].is_object()) {
+                  auto jp = j["physics"];
+                  bodyType = jp.value("bodyType", bodyType);
+                  mass = jp.value("mass", mass);
+                  bounce = jp.value("bounciness", jp.value("restitution", bounce));
+                  friction = jp.value("friction", friction);
+                  gravity = jp.value("gravityFactor", gravity);
+                }
+              }
+            }
+
+            m_inspectorPanel->setPhysicsBodyType(static_cast<int>(bodyType));
+            m_inspectorPanel->setPhysicsMass(mass);
+            m_inspectorPanel->setPhysicsBounciness(bounce);
+            m_inspectorPanel->setPhysicsFriction(friction);
+            m_inspectorPanel->setPhysicsGravityFactor(gravity);
+
         } else {
             // deselect
             m_inspectorPanel->setTargetObject("None");
@@ -711,6 +803,12 @@ void Engine::setSelectedMeshIndex(int index) {
             m_inspectorPanel->setMetallic(0.0f);
             m_inspectorPanel->setTransmission(0.0f);
             m_inspectorPanel->setIOR(1.5f);
+
+            m_inspectorPanel->setPhysicsBodyType(2);
+            m_inspectorPanel->setPhysicsMass(1.0f);
+            m_inspectorPanel->setPhysicsBounciness(0.5f);
+            m_inspectorPanel->setPhysicsFriction(0.5f);
+            m_inspectorPanel->setPhysicsGravityFactor(1.0f);
         }
     }
 
@@ -1105,32 +1203,35 @@ void Engine::mainLoop() {
       vpSize = m_viewportPanel->getSize();
     }
 
-    if (m_physicsEngine && m_physicsRunning) {
-      m_physicsEngine->update(deltaTime);
+      if (m_physicsEngine && m_physicsRunning) {
+          m_physicsEngine->update(deltaTime);
 
-      auto vkRenderer = static_cast<VulkanRenderer*>(m_renderer.get());
-      if (vkRenderer) {
-        auto& sceneMeshes = vkRenderer->getSceneMeshes();
-        auto& bodyInterface = m_physicsEngine->getPhysicsSystem().GetBodyInterface();
+          auto vkRenderer = static_cast<VulkanRenderer*>(m_renderer.get());
+          if (vkRenderer) {
+              auto& sceneMeshes = vkRenderer->getSceneMeshes();
+              auto& bodyInterface = m_physicsEngine->getPhysicsSystem().GetBodyInterface();
 
-        for (auto& mesh : sceneMeshes) {
-          if (mesh && !mesh->getBodyID().IsInvalid()) {
-            // pull pos from jolt
-            JPH::RVec3 joltPos;
-            JPH::Quat joltRot;
-            bodyInterface.GetPositionAndRotation(mesh->getBodyID(), joltPos, joltRot);
+              for (auto& mesh : sceneMeshes) {
+                  if (mesh && !mesh->getBodyID().IsInvalid()) {
 
-            // convert to glm
-            glm::vec3 pos(joltPos.GetX(), joltPos.GetY(), joltPos.GetZ());
-            glm::quat rot(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
+                      if (bodyInterface.GetMotionType(mesh->getBodyID()) == JPH::EMotionType::Static) {
+                          continue;
+                      }
 
-            glm::mat4 transform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
+                      JPH::RVec3 joltPos;
+                      JPH::Quat joltRot;
+                      bodyInterface.GetPositionAndRotation(mesh->getBodyID(), joltPos, joltRot);
 
-            mesh->setModelMatrix(transform, false);
+                      glm::vec3 pos(joltPos.GetX(), joltPos.GetY(), joltPos.GetZ());
+                      glm::quat rot(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
+
+                      glm::mat4 transform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
+
+                      mesh->setModelMatrix(transform, false);
+                  }
+              }
           }
-        }
       }
-    }
 
     m_renderer->drawFrame(m_camera.getViewMatrix(), vpOffset, vpSize);
   }

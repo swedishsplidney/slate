@@ -49,6 +49,19 @@ namespace slate {
 
         void setOnLayoutChanged(std::function<void()> cb) { m_onLayoutChanged = cb; }
 
+
+        void setPhysicsBodyType(int type);
+        void setPhysicsMass(float mass);
+        void setPhysicsBounciness(float bounce);
+        void setPhysicsFriction(float friction);
+        void setPhysicsGravityFactor(float gravity);
+
+        void setOnPhysicsBodyTypeChanged(std::function<void(int)> cb) { m_onPhysicsBodyTypeChanged = cb; }
+        void setOnPhysicsMassChanged(std::function<void(float)> cb) { m_onPhysicsMassChanged = cb; }
+        void setOnPhysicsBouncinessChanged(std::function<void(float)> cb) { m_onPhysicsBouncinessChanged = cb; }
+        void setOnPhysicsFrictionChanged(std::function<void(float)> cb) { m_onPhysicsFrictionChanged = cb; }
+        void setOnPhysicsGravityFactorChanged(std::function<void(float)> cb) { m_onPhysicsGravityFactorChanged = cb; }
+
     private:
         void updateChildLayouts();
 
@@ -75,5 +88,18 @@ namespace slate {
         std::function<void(int, float)> m_onMaterialFloatChanged;
 
         std::function<void()> m_onLayoutChanged;
+
+        std::shared_ptr<UIDropdown> m_physicsDropdown;
+        std::shared_ptr<UIButton> m_bodyTypeButtons[3];
+        std::shared_ptr<UIInputBox> m_massInputBox;
+        std::shared_ptr<UIInputBox> m_bouncinessInputBox;
+        std::shared_ptr<UIInputBox> m_frictionInputBox;
+        std::shared_ptr<UIInputBox> m_gravityFactorInputBox;
+
+        std::function<void(int)> m_onPhysicsBodyTypeChanged;
+        std::function<void(float)> m_onPhysicsMassChanged;
+        std::function<void(float)> m_onPhysicsBouncinessChanged;
+        std::function<void(float)> m_onPhysicsFrictionChanged;
+        std::function<void(float)> m_onPhysicsGravityFactorChanged;
     };
 }

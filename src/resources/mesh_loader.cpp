@@ -29,11 +29,19 @@ namespace slate {
 
     // load from json
     bool loadMaterialsFromJson(const fs::path& jsonPath, std::vector<Material>& outMaterials) {
+        if (!fs::exists(jsonPath) || fs::file_size(jsonPath) == 0) {
+            return false;
+        }
+
         std::ifstream file(jsonPath);
         if (!file.is_open()) return false;
 
         nlohmann::json j;
-        file >> j;
+        try {
+            file >> j;
+        } catch (...) {
+            return false;
+        }
 
         outMaterials.clear();
         if (!j.contains("materials") || !j["materials"].is_array()) return false;

@@ -189,6 +189,127 @@ namespace slate {
             m_matFloatInputBoxes[i] = inputBox;
         }
 
+        // physics
+        auto physicsDropdown = std::make_shared<UIDropdown>(
+            "PhysicsDropdown",
+            glm::vec2(8.0f, 540.0f),
+            glm::vec2(panelWidth - 16.0f, 280.0f),
+            "Physics",
+            true
+        );
+        physicsDropdown->setFontLoader(m_fontLoader);
+        physicsDropdown->setDrawsBackground(true);
+        physicsDropdown->setColor(glm::vec4(0.10f, 0.11f, 0.15f, 1.0f));
+        physicsDropdown->setOnToggle([this](bool) { updateChildLayouts(); });
+        addChild(physicsDropdown);
+        m_physicsDropdown = physicsDropdown;
+
+        float physicsRowY[5] = { 25.0f, 75.0f, 125.0f, 175.0f, 225.0f };
+
+        // body type
+        float thirdWidth = (fullFieldWidth - 8.0f) / 3.0f;
+        const char* bodyTypeNames[3] = { "Static", "Kinematic", "Dynamic" };
+
+        for (int i = 0; i < 3; ++i) {
+            float bx = fullFieldX + (i * (thirdWidth + 4.0f));
+
+            auto typeButton = std::make_shared<UIButton>(
+                "BodyTypeBtn_" + std::to_string(i),
+                glm::vec2(bx, physicsRowY[0]),
+                glm::vec2(thirdWidth, 22.0f),
+                bodyTypeNames[i],
+                [this, i]() {
+                    setPhysicsBodyType(i);
+
+                    if (m_onPhysicsBodyTypeChanged) {
+                        m_onPhysicsBodyTypeChanged(i);
+                    }
+                }
+            );
+
+            typeButton->setFontLoader(m_fontLoader);
+            typeButton->setDrawsBackground(true);
+            typeButton->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
+
+            physicsDropdown->addContentElement(typeButton);
+            m_bodyTypeButtons[i] = typeButton;
+        }
+
+        // mass
+        auto massInputBox = std::make_shared<UIInputBox>("MassInputBox", glm::vec2(fullFieldX, physicsRowY[1]), glm::vec2(fullFieldWidth, 22.0f), 1.0f);
+        massInputBox->setFontLoader(m_fontLoader);
+        massInputBox->setDrawsBackground(true);
+        massInputBox->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
+
+        {
+            std::weak_ptr<UIInputBox> weakBox = massInputBox;
+            massInputBox->setOnValueChanged([this, weakBox](float val) {
+                float clamped = std::max(0.001f, val);
+                if (clamped != val) {
+                    if (auto box = weakBox.lock()) {
+                        box->setValueWithoutCallback(clamped);
+                    }
+                }
+                if (m_onPhysicsMassChanged) m_onPhysicsMassChanged(clamped);
+            });
+        }
+        physicsDropdown->addContentElement(massInputBox);
+        m_massInputBox = massInputBox;
+
+        // bounciness
+        auto bouncinessBox = std::make_shared<UIInputBox>("BouncinessBox", glm::vec2(fullFieldX, physicsRowY[2]), glm::vec2(fullFieldWidth, 22.0f), 0.5f);
+        bouncinessBox->setFontLoader(m_fontLoader);
+        bouncinessBox->setDrawsBackground(true);
+        bouncinessBox->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
+
+        {
+            std::weak_ptr<UIInputBox> weakBox = bouncinessBox;
+            bouncinessBox->setOnValueChanged([this, weakBox](float val) {
+                float clamped = std::clamp(val, 0.0f, 1.0f);
+                if (clamped != val) {
+                    if (auto box = weakBox.lock()) {
+                        box->setValueWithoutCallback(clamped);
+                    }
+                }
+                if (m_onPhysicsBouncinessChanged) m_onPhysicsBouncinessChanged(clamped);
+            });
+        }
+        physicsDropdown->addContentElement(bouncinessBox);
+        m_bouncinessInputBox = bouncinessBox;
+
+        // friction
+        auto frictionBox = std::make_shared<UIInputBox>("FrictionBox", glm::vec2(fullFieldX, physicsRowY[3]), glm::vec2(fullFieldWidth, 22.0f), 0.5f);
+        frictionBox->setFontLoader(m_fontLoader);
+        frictionBox->setDrawsBackground(true);
+        frictionBox->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
+
+        {
+            std::weak_ptr<UIInputBox> weakBox = frictionBox;
+            frictionBox->setOnValueChanged([this, weakBox](float val) {
+                float clamped = std::clamp(val, 0.0f, 1.0f);
+                if (clamped != val) {
+                    if (auto box = weakBox.lock()) {
+                        box->setValueWithoutCallback(clamped);
+                    }
+                }
+                if (m_onPhysicsFrictionChanged) m_onPhysicsFrictionChanged(clamped);
+            });
+        }
+        physicsDropdown->addContentElement(frictionBox);
+        m_frictionInputBox = frictionBox;
+
+        // gravity
+        auto gravityBox = std::make_shared<UIInputBox>("GravityBox", glm::vec2(fullFieldX, physicsRowY[4]), glm::vec2(fullFieldWidth, 22.0f), 1.0f);
+        gravityBox->setFontLoader(m_fontLoader);
+        gravityBox->setDrawsBackground(true);
+        gravityBox->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
+        gravityBox->setOnValueChanged([this](float val) {
+            if (m_onPhysicsGravityFactorChanged) m_onPhysicsGravityFactorChanged(val);
+        });
+        physicsDropdown->addContentElement(gravityBox);
+        m_gravityFactorInputBox = gravityBox;
+
+
         updateChildLayouts();
     }
 
@@ -199,11 +320,12 @@ namespace slate {
     void UIInspectorPanel::generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) {
         if (!m_visible) return;
 
-        if (m_children.size() < 3) return;
+        if (m_children.size() < 4) return;
 
         auto headerBar = m_children[0];
         auto transformDropdown = std::static_pointer_cast<UIDropdown>(m_children[1]);
         auto materialDropdown = std::static_pointer_cast<UIDropdown>(m_children[2]);
+        auto physicsDropdown = std::static_pointer_cast<UIDropdown>(m_children[3]);
 
         if (m_drawsBackground) {
             glm::vec2 absPos = getAbsolutePosition();
@@ -211,8 +333,11 @@ namespace slate {
 
             float transH = transformDropdown->isExpanded() ? transformDropdown->getSize().y : transformDropdown->getHeaderHeight();
             float matH = materialDropdown->isExpanded() ? materialDropdown->getSize().y : materialDropdown->getHeaderHeight();
+            float physH = physicsDropdown->isExpanded() ? physicsDropdown->getSize().y : physicsDropdown->getHeaderHeight();
+
             float matPosY = transformDropdown->getPosition().y + transH + 8.0f;
-            float totalHeight = matPosY + matH + 10.0f;
+            float physPosY = matPosY + matH + 8.0f;
+            float totalHeight = physPosY + physH + 10.0f;
 
             glm::vec4 panelBgColor(0.004f, 0.0045f, 0.0055f, 1.0f);
 
@@ -277,9 +402,23 @@ namespace slate {
             indices.push_back(bgIdx + 0); indices.push_back(bgIdx + 2); indices.push_back(bgIdx + 3);
         }
 
+        if (physicsDropdown->isExpanded()) {
+            glm::vec2 dPos = physicsDropdown->getAbsolutePosition();
+            glm::vec2 dSize = physicsDropdown->getSize();
+            float headerH = physicsDropdown->getHeaderHeight();
+            uint16_t bgIdx = static_cast<uint16_t>(vertices.size());
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + dSize.y), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x, dPos.y + dSize.y), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
+            indices.push_back(bgIdx + 0); indices.push_back(bgIdx + 1); indices.push_back(bgIdx + 2);
+            indices.push_back(bgIdx + 0); indices.push_back(bgIdx + 2); indices.push_back(bgIdx + 3);
+        }
+
         // generate dropdown geometry
         transformDropdown->generateGeometry(vertices, indices);
         materialDropdown->generateGeometry(vertices, indices);
+        physicsDropdown->generateGeometry(vertices, indices);
 
         glm::vec2 transAbsPos = transformDropdown->getAbsolutePosition();
         if (transformDropdown->isExpanded()) {
@@ -297,22 +436,31 @@ namespace slate {
             m_fontLoader->generateTextGeometry("IOR", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 169.0f + matOffset), dimTextColor, vertices, indices);
             m_fontLoader->generateTextGeometry("Transmission", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 219.0f + matOffset), dimTextColor, vertices, indices);
         }
+
+        glm::vec2 physAbsPos = physicsDropdown->getAbsolutePosition();
+        if (physicsDropdown->isExpanded()) {
+            m_fontLoader->generateTextGeometry("Body Type", glm::vec2(physAbsPos.x + 12.0f, physAbsPos.y + 28.0f + 19.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Mass",      glm::vec2(physAbsPos.x + 12.0f, physAbsPos.y + 28.0f + 69.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Bounce",    glm::vec2(physAbsPos.x + 12.0f, physAbsPos.y + 28.0f + 119.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Friction",  glm::vec2(physAbsPos.x + 12.0f, physAbsPos.y + 28.0f + 169.0f), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Gravity",   glm::vec2(physAbsPos.x + 12.0f, physAbsPos.y + 28.0f + 219.0f), dimTextColor, vertices, indices);
+        }
     }
 
     void UIInspectorPanel::updateChildLayouts() {
-        if (m_children.size() >= 3) {
+        if (m_children.size() >= 4) {
             float panelWidth = m_size.x > 0 ? m_size.x : 300.0f;
 
             m_children[0]->setSize(glm::vec2(panelWidth, m_children[0]->getSize().y));
 
             auto transformDropdown = std::static_pointer_cast<UIDropdown>(m_children[1]);
             auto materialDropdown = std::static_pointer_cast<UIDropdown>(m_children[2]);
+            auto physicsDropdown = std::static_pointer_cast<UIDropdown>(m_children[3]);
 
             transformDropdown->setSize(glm::vec2(panelWidth - 16.0f, transformDropdown->getSize().y));
 
             float transformHeight = transformDropdown->isExpanded() ? transformDropdown->getSize().y : transformDropdown->getHeaderHeight();
             float materialPosY = transformDropdown->getPosition().y + transformHeight + 8.0f;
-
             materialDropdown->setPosition(glm::vec2(8.0f, materialPosY));
 
             float baseMaterialContentHeight = 290.0f;
@@ -320,19 +468,15 @@ namespace slate {
             if (m_colorPicker && m_colorPicker->isOpen()) {
                 baseMaterialContentHeight += colorPickerExtraH;
             }
-
             materialDropdown->setSize(glm::vec2(panelWidth - 16.0f, baseMaterialContentHeight));
 
-            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? 195.0f + 75.0f : 0.0f;
-            float defaultFloatY[4] = { 75.0f, 125.0f, 175.0f, 225.0f };
-            for (int i = 0; i < 4; ++i) {
-                if (m_matFloatInputBoxes[i]) {
-                    m_matFloatInputBoxes[i]->setPosition(glm::vec2(m_matFloatInputBoxes[i]->getPosition().x, defaultFloatY[i] + matOffset));
-                }
-            }
-
             float materialHeight = materialDropdown->isExpanded() ? materialDropdown->getSize().y : materialDropdown->getHeaderHeight();
-            m_size.y = materialPosY + materialHeight + 10.0f;
+            float physicsPosY = materialPosY + materialHeight + 8.0f;
+            physicsDropdown->setPosition(glm::vec2(8.0f, physicsPosY));
+            physicsDropdown->setSize(glm::vec2(panelWidth - 16.0f, physicsDropdown->getSize().y));
+
+            float physicsHeight = physicsDropdown->isExpanded() ? physicsDropdown->getSize().y : physicsDropdown->getHeaderHeight();
+            m_size.y = physicsPosY + physicsHeight + 10.0f;
         }
     }
 
@@ -390,6 +534,30 @@ namespace slate {
         if (m_matFloatInputBoxes[3]) {
             m_matFloatInputBoxes[3]->setValueWithoutCallback(val);
         }
+    }
+
+    void UIInspectorPanel::setPhysicsBodyType(int type) {
+        for (int i = 0; i < 3; ++i) {
+            if (m_bodyTypeButtons[i]) {
+                if (i == type) {
+                    m_bodyTypeButtons[i]->setColor(glm::vec4(0.25f, 0.35f, 0.55f, 1.0f));
+                } else {
+                    m_bodyTypeButtons[i]->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
+                }
+            }
+        }
+    }
+    void UIInspectorPanel::setPhysicsMass(float mass) {
+        if (m_massInputBox) m_massInputBox->setValue(mass);
+    }
+    void UIInspectorPanel::setPhysicsBounciness(float bounce) {
+        if (m_bouncinessInputBox) m_bouncinessInputBox->setValue(bounce);
+    }
+    void UIInspectorPanel::setPhysicsFriction(float friction) {
+        if (m_frictionInputBox) m_frictionInputBox->setValue(friction);
+    }
+    void UIInspectorPanel::setPhysicsGravityFactor(float gravity) {
+        if (m_gravityFactorInputBox) m_gravityFactorInputBox->setValue(gravity);
     }
 
 }
