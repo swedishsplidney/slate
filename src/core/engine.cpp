@@ -129,6 +129,7 @@ Engine::Engine() {
   m_commandRegistry = std::make_unique<CommandRegistry>();
   m_commandContext.renderer = static_cast<VulkanRenderer *>(m_renderer.get());
   m_commandContext.uiManager = m_uiManager.get();
+  m_commandContext.physicsEngine = m_physicsEngine.get();
 
   registerDefaultCommands();
 
@@ -1106,6 +1107,29 @@ void Engine::mainLoop() {
 
     if (m_physicsEngine && m_physicsRunning) {
       m_physicsEngine->update(deltaTime);
+
+      auto vkRenderer = static_cast<VulkanRenderer*>(m_renderer.get());
+      if (vkRenderer) {
+        auto& sceneMeshes = vkRenderer->getSceneMeshes();
+        auto& bodyInterface = m_physicsEngine->getPhysicsSystem().GetBodyInterface();
+
+        for (auto& mesh : sceneMeshes) {
+          if (mesh && !mesh->getBodyID().IsInvalid()) {
+            // pull pos from jolt
+            JPH::RVec3 joltPos;
+            JPH::Quat joltRot;
+            bodyInterface.GetPositionAndRotation(mesh->getBodyID(), joltPos, joltRot);
+
+            // convert to glm
+            glm::vec3 pos(joltPos.GetX(), joltPos.GetY(), joltPos.GetZ());
+            glm::quat rot(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
+
+            glm::mat4 transform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
+
+            mesh->setModelMatrix(transform, false);
+          }
+        }
+      }
     }
 
     m_renderer->drawFrame(m_camera.getViewMatrix(), vpOffset, vpSize);

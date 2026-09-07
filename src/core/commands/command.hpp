@@ -9,11 +9,13 @@ namespace slate {
     class VulkanRenderer;
     class Scene;
     class UIManager;
+    class PhysicsEngine;
 
     struct CommandContext {
         VulkanRenderer* renderer{nullptr};
         Scene* scene{nullptr};
         UIManager* uiManager{nullptr};
+        PhysicsEngine* physicsEngine{nullptr};
     };
 
     class ICommand {

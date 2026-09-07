@@ -7,6 +7,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <Jolt/Jolt.h>
+#include <Jolt/Physics/Body/BodyID.h>
+#include <Jolt/Physics/PhysicsSystem.h>
 
 namespace slate {
 
@@ -33,11 +36,22 @@ namespace slate {
         const std::string& getName() const { return m_name; }
         void setName(const std::string& name) { m_name = name; }
 
-        void setModelMatrix(const glm::mat4& matrix) { m_modelMatrix = matrix; }
+        void setPhysicsSystem(JPH::PhysicsSystem* system) { m_physicsSystem = system; }
+
+        void setBodyID(JPH::BodyID id) { m_bodyID = id; }
+        JPH::BodyID getBodyID() const { return m_bodyID; }
+
+        void setModelMatrix(const glm::mat4& matrix, bool updatePhysics = true) {
+            m_modelMatrix = matrix;
+            if (updatePhysics) {
+                syncToPhysics();
+            }
+        }
         const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
 
         void translate(const glm::vec3& delta) {
             m_modelMatrix = glm::translate(m_modelMatrix, delta);
+            syncToPhysics();
         }
 
         void rotate(const glm::quat& rotation) {
@@ -46,6 +60,7 @@ namespace slate {
             glm::mat4 translateBack = glm::translate(glm::mat4(1.0f), m_geometricCenter);
 
             m_modelMatrix = m_modelMatrix * translateBack * rotateMat * translateToCenter;
+            syncToPhysics();
         }
 
         glm::vec3 getGeometricCenter() const { return m_geometricCenter; }
@@ -83,6 +98,27 @@ namespace slate {
         std::vector<uint16_t> m_indices;
 
         std::string m_filePath;
+
+        void syncToPhysics() {
+            if (m_physicsSystem && !m_bodyID.IsInvalid()) {
+                auto& bodyInterface = m_physicsSystem->GetBodyInterface();
+
+                glm::vec3 pos = glm::vec3(m_modelMatrix[3]);
+                glm::quat rot = glm::quat_cast(m_modelMatrix);
+
+                JPH::RVec3 joltPos(pos.x, pos.y, pos.z);
+                JPH::Quat joltRot(rot.x, rot.y, rot.z, rot.w);
+
+                bodyInterface.SetPositionAndRotation(m_bodyID, joltPos, joltRot, JPH::EActivation::Activate);
+
+                // kill momentum
+                bodyInterface.SetLinearVelocity(m_bodyID, JPH::Vec3::sZero());
+                bodyInterface.SetAngularVelocity(m_bodyID, JPH::Vec3::sZero());
+            }
+        }
+
+        JPH::PhysicsSystem* m_physicsSystem{nullptr};
+        JPH::BodyID m_bodyID;
     };
 
 }
