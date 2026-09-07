@@ -9,6 +9,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/c%2B%2B_20-%2300599C.svg?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Vulkan-%23AC162C.svg?style=for-the-badge&logo=vulkan&logoColor=white" alt="Vulkan">
+  <img src="https://img.shields.io/badge/JOLT-%234989C7.svg?style=for-the-badge&logo=jolt&logoColor=white" alt="JOLT">
   <img src="https://img.shields.io/badge/SDL3-%2314385C.svg?style=for-the-badge&logo=sdl&logoColor=white" alt="SDL3">
   <img src="https://img.shields.io/badge/GLM-%23FFB13B.svg?style=for-the-badge" alt="GLM">
   <img src="https://img.shields.io/badge/CMake-%23008FBA.svg?style=for-the-badge&logo=cmake&logoColor=white" alt="CMake">
