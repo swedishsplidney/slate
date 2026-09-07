@@ -1225,7 +1225,10 @@ void Engine::mainLoop() {
                       glm::vec3 pos(joltPos.GetX(), joltPos.GetY(), joltPos.GetZ());
                       glm::quat rot(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
 
-                      glm::mat4 transform = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
+                      // dont overwrite scale
+                      glm::mat4 transform = glm::translate(glm::mat4(1.0f), pos) *
+                                            glm::mat4_cast(rot) *
+                                            glm::scale(glm::mat4(1.0f), mesh->getScale());
 
                       mesh->setModelMatrix(transform, false);
                   }

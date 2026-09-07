@@ -1,5 +1,6 @@
 #pragma once
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include "vertex.hpp"
 #include <vector>
 #include <string>
@@ -8,9 +9,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Collision/Shape/ScaledShape.h>
 
 namespace slate {
 
@@ -42,8 +45,17 @@ namespace slate {
         void setBodyID(JPH::BodyID id) { m_bodyID = id; }
         JPH::BodyID getBodyID() const { return m_bodyID; }
 
+        void setBaseShape(JPH::ShapeRefC shape) { m_baseShape = shape; }
+
         void setModelMatrix(const glm::mat4& matrix, bool updatePhysics = true) {
             m_modelMatrix = matrix;
+
+            // cache scale
+            glm::vec3 translation, skew;
+            glm::quat orientation;
+            glm::vec4 perspective;
+            glm::decompose(matrix, m_scale, orientation, translation, skew, perspective);
+
             if (updatePhysics) {
                 syncToPhysics();
             }
@@ -65,16 +77,14 @@ namespace slate {
         }
 
         glm::vec3 getGeometricCenter() const { return m_geometricCenter; }
+        glm::vec3 getScale() const { return m_scale; }
 
         const std::vector<Vertex>& getVertices() const { return m_vertices; }
         const std::vector<uint16_t>& getIndices() const { return m_indices; }
 
         void setTransparent(bool transparent) { m_transparent = transparent; }
-
         void setPath(const std::string& path) { m_filePath = path; }
         const std::string& getPath() const { return m_filePath; }
-
-
 
         void setPhysicsProperty(const std::string& propertyName, float value) {
             if (!m_physicsSystem || m_bodyID.IsInvalid()) return;
@@ -132,22 +142,38 @@ namespace slate {
         std::string m_name;
 
         glm::mat4 m_modelMatrix{1.0f};
+        glm::vec3 m_scale{1.0f};
         glm::vec3 m_geometricCenter{0.0f};
 
         std::vector<Vertex> m_vertices;
         std::vector<uint16_t> m_indices;
-
         std::string m_filePath;
+
+        JPH::ShapeRefC m_baseShape{nullptr};
 
         void syncToPhysics() {
             if (m_physicsSystem && !m_bodyID.IsInvalid()) {
                 auto& bodyInterface = m_physicsSystem->GetBodyInterface();
 
-                glm::vec3 pos = glm::vec3(m_modelMatrix[3]);
-                glm::quat rot = glm::quat_cast(m_modelMatrix);
+                // decompose in a way that does not cause explosions (sigtrap errors)
+                glm::vec3 scale, translation, skew;
+                glm::quat orientation;
+                glm::vec4 perspective;
+                glm::decompose(m_modelMatrix, scale, orientation, translation, skew, perspective);
+                orientation = glm::normalize(orientation);
 
-                JPH::RVec3 joltPos(pos.x, pos.y, pos.z);
-                JPH::Quat joltRot(rot.x, rot.y, rot.z, rot.w);
+                // update
+                if (m_baseShape) {
+                    JPH::ScaledShapeSettings scaledSettings(m_baseShape, JPH::Vec3(scale.x, scale.y, scale.z));
+                    auto shapeResult = scaledSettings.Create();
+                    if (!shapeResult.HasError()) {
+                        bodyInterface.SetShape(m_bodyID, shapeResult.Get(), true, JPH::EActivation::Activate);
+                    }
+                }
+
+                // sync to jolt
+                JPH::RVec3 joltPos(translation.x, translation.y, translation.z);
+                JPH::Quat joltRot(orientation.x, orientation.y, orientation.z, orientation.w);
 
                 if (bodyInterface.GetMotionType(m_bodyID) == JPH::EMotionType::Static) {
                     bodyInterface.SetPositionAndRotation(m_bodyID, joltPos, joltRot, JPH::EActivation::DontActivate);
@@ -155,7 +181,6 @@ namespace slate {
                 }
 
                 bodyInterface.SetPositionAndRotation(m_bodyID, joltPos, joltRot, JPH::EActivation::Activate);
-
                 bodyInterface.SetLinearVelocity(m_bodyID, JPH::Vec3::sZero());
                 bodyInterface.SetAngularVelocity(m_bodyID, JPH::Vec3::sZero());
             }

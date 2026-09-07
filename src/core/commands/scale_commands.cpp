@@ -3,6 +3,7 @@
 #include "renderer/vulkan/vulkan_renderer.hpp"
 #include "ui/ui_manager.hpp"
 #include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 namespace slate {
 
@@ -15,7 +16,7 @@ namespace slate {
             auto& meshes = vkRenderer->getSceneMeshes();
             if (m_meshIndex < meshes.size() && meshes[m_meshIndex]) {
                 auto& mesh = meshes[m_meshIndex];
-                
+
                 glm::mat4 modelMat = mesh->getModelMatrix();
                 glm::vec3 scale, translation;
                 glm::quat orientation;
@@ -23,10 +24,13 @@ namespace slate {
                 glm::vec4 perspective;
                 glm::decompose(modelMat, scale, orientation, translation, skew, perspective);
 
+                // normalize quats
+                orientation = glm::normalize(orientation);
+
                 m_oldScale = scale;
 
-                glm::mat4 newModel = glm::translate(glm::mat4(1.0f), translation) * 
-                                     glm::mat4_cast(orientation) * 
+                glm::mat4 newModel = glm::translate(glm::mat4(1.0f), translation) *
+                                     glm::mat4_cast(orientation) *
                                      glm::scale(glm::mat4(1.0f), m_newScale);
                 mesh->setModelMatrix(newModel);
             }
@@ -50,6 +54,9 @@ namespace slate {
                 glm::vec3 skew;
                 glm::vec4 perspective;
                 glm::decompose(modelMat, scale, orientation, translation, skew, perspective);
+
+                // normalize quats
+                orientation = glm::normalize(orientation);
 
                 glm::mat4 oldModel = glm::translate(glm::mat4(1.0f), translation) * 
                                      glm::mat4_cast(orientation) * 
