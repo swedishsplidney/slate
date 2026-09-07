@@ -100,6 +100,8 @@ add_executable(slate
         src/physics/physics_engine.cpp
         src/physics/physics_engine.hpp
         src/core/commands/physics_commands.hpp
+        src/physics/collider_generator.cpp
+        src/physics/collider_generator.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})

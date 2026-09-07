@@ -4,7 +4,7 @@
 #include "ui/ui_manager.hpp"
 #include "portable-file-dialogs.h"
 #include "physics/physics_engine.hpp"
-#include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include "physics/collider_generator.hpp"
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/Body.h>
 
@@ -44,7 +44,6 @@ namespace slate {
 
         if (context.renderer) {
             auto& globalMaterials = context.renderer->getGlobalMaterials();
-
             size_t materialsBeforeLoad = globalMaterials.size();
 
             if (ext == ".obj") {
@@ -91,19 +90,7 @@ namespace slate {
             if (context.physicsEngine) {
                 newMesh->setPhysicsSystem(&context.physicsEngine->getPhysicsSystem());
 
-                // calc bounding box
-                glm::vec3 minBounds(1e30f);
-                glm::vec3 maxBounds(-1e30f);
-                for (const auto& v : loadedVertices) {
-                    minBounds = glm::min(minBounds, v.pos);
-                    maxBounds = glm::max(maxBounds, v.pos);
-                }
-                glm::vec3 halfExtents = (maxBounds - minBounds) * 0.5f;
-                halfExtents = glm::max(halfExtents, glm::vec3(0.1f));
-
-                // create box
-                JPH::BoxShapeSettings boxSettings(JPH::Vec3(halfExtents.x, halfExtents.y, halfExtents.z));
-                JPH::ShapeSettings::ShapeResult shapeResult = boxSettings.Create();
+                JPH::ShapeSettings::ShapeResult shapeResult = ColliderGenerator::createOptimalShape(loadedVertices);
 
                 if (!shapeResult.HasError()) {
                     JPH::ShapeRefC shape = shapeResult.Get();
@@ -111,7 +98,7 @@ namespace slate {
 
                     JPH::BodyCreationSettings bodySettings(
                         shape,
-                        JPH::RVec3(initialPos.x, initialPos.y, initialPos.z),
+                        JPH::RVec3(initialPos.x, initialPos.y, initialPos.y),
                         JPH::Quat::sIdentity(),
                         JPH::EMotionType::Dynamic,
                         slate::Layers::MOVING
@@ -123,8 +110,10 @@ namespace slate {
                     if (body) {
                         bodyInterface.AddBody(body->GetID(), JPH::EActivation::Activate);
                         newMesh->setBodyID(body->GetID());
-                        std::cout << "[physics] created dynamic rigid body for mesh: " << path.filename().string() << "\n";
+                        std::cout << "[physics] created convex hull rigid body for mesh: " << path.filename().string() << "\n";
                     }
+                } else {
+                    std::cerr << "[physics error] failed to generate optimal collider shape for mesh.\n";
                 }
             }
 
