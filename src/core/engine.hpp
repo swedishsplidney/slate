@@ -83,6 +83,8 @@ namespace slate {
 
         void setSelectedMeshIndex(int index);
         void updateHierarchyItems();
+
+        bool m_physicsRunning{false};
     };
 
 }

@@ -9,6 +9,7 @@
 #include "core/commands/translate_commands.hpp"
 #include "core/commands/save_scene_command.hpp"
 #include "core/commands/load_scene_command.hpp"
+#include "core/commands/physics_commands.hpp"
 #include "renderer/vulkan/vulkan_renderer.hpp"
 #include "resources/mesh_loader.hpp"
 #include "ui/ui_button.hpp"
@@ -456,17 +457,22 @@ void Engine::registerDefaultCommands() {
                                                        matId, prop, val);
       });
 
-    m_commandRegistry->registerCommand(
+  m_commandRegistry->registerCommand(
       "file.save_scene", [](const CommandRegistry::CommandArgs &args) {
         std::string path = args.empty() ? "scene.slate" : args[0];
         return std::make_unique<SaveSceneCommand>(path);
       });
 
-    m_commandRegistry->registerCommand(
+  m_commandRegistry->registerCommand(
       "file.load_scene", [](const CommandRegistry::CommandArgs &args) {
         std::string path = args.empty() ? "scene.slate" : args[0];
         return std::make_unique<LoadSceneCommand>(path);
       });
+
+  m_commandRegistry->registerCommand(
+    "physics.toggle", [this](const CommandRegistry::CommandArgs &) {
+      return std::make_unique<TogglePhysicsCommand>(m_physicsRunning);
+    });
 }
 
 Engine::~Engine() { cleanup(); }
@@ -783,6 +789,14 @@ void Engine::mainLoop() {
             }
       }
 
+      // f5 (physics toggle)
+      if (event.type == SDL_EVENT_KEY_DOWN && event.key.repeat == 0) {
+        if (!(event.key.mod & SDL_KMOD_CTRL) &&
+            event.key.scancode == SDL_SCANCODE_F5) {
+          m_commandRegistry->execute("physics.toggle", m_commandContext);
+            }
+      }
+
       // capture mouse position and viewport bounds on press
       if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         float mx = static_cast<float>(event.button.x);
@@ -1090,7 +1104,7 @@ void Engine::mainLoop() {
       vpSize = m_viewportPanel->getSize();
     }
 
-    if (m_physicsEngine) {
+    if (m_physicsEngine && m_physicsRunning) {
       m_physicsEngine->update(deltaTime);
     }
 

@@ -99,6 +99,7 @@ add_executable(slate
         src/core/commands/load_scene_command.hpp
         src/physics/physics_engine.cpp
         src/physics/physics_engine.hpp
+        src/core/commands/physics_commands.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
