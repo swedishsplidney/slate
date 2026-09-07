@@ -111,6 +111,10 @@ Engine::Engine() {
   m_renderer = std::make_unique<VulkanRenderer>(m_window);
   m_renderer->init();
 
+  // init phys engin
+  m_physicsEngine = std::make_unique<PhysicsEngine>();
+  m_physicsEngine->init();
+
   // init ui manager
   m_uiManager = std::make_unique<UIManager>();
   m_uiManager->init(static_cast<float>(m_width), static_cast<float>(m_height));
@@ -1084,6 +1088,10 @@ void Engine::mainLoop() {
     if (m_viewportPanel) {
       vpOffset = m_viewportPanel->getAbsolutePosition();
       vpSize = m_viewportPanel->getSize();
+    }
+
+    if (m_physicsEngine) {
+      m_physicsEngine->update(deltaTime);
     }
 
     m_renderer->drawFrame(m_camera.getViewMatrix(), vpOffset, vpSize);

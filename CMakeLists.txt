@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.22)
 project(slate VERSION 0.1.0 LANGUAGES CXX)
 
 include(FetchContent)
+set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
         JoltPhysics
         GIT_REPOSITORY https://github.com/jrouwe/joltphysics.git
         GIT_TAG        v5.6.0
+        SOURCE_SUBDIR "Build"
 )
 FetchContent_MakeAvailable(JoltPhysics)
 
@@ -95,6 +97,8 @@ add_executable(slate
         src/core/commands/save_scene_command.hpp
         src/core/commands/load_scene_command.cpp
         src/core/commands/load_scene_command.hpp
+        src/physics/physics_engine.cpp
+        src/physics/physics_engine.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})

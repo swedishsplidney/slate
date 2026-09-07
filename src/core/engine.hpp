@@ -11,6 +11,7 @@
 #include "renderer/mesh.hpp"
 #include "renderer/renderer.hpp"
 #include "core/commands/command_registry.hpp"
+#include "physics/physics_engine.hpp"
 
 namespace slate {
 
@@ -44,6 +45,8 @@ namespace slate {
         int m_height{720};
 
         std::unique_ptr<Renderer> m_renderer{nullptr};
+
+        std::unique_ptr<PhysicsEngine> m_physicsEngine;
 
         Camera m_camera{glm::vec3(0.0f, 0.0f, 4.0f)};
         uint64_t m_lastTime{0};
