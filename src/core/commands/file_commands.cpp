@@ -127,7 +127,7 @@ namespace slate {
 
                     JPH::BodyCreationSettings bodySettings(
                         shape,
-                        JPH::RVec3(initialPos.x, initialPos.y, initialPos.z), // Fixed initialPos.y typo here!
+                        JPH::RVec3(initialPos.x, initialPos.y, initialPos.z),
                         JPH::Quat::sIdentity(),
                         motionType,
                         objectLayer
