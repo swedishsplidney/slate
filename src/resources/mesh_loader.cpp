@@ -57,6 +57,7 @@ namespace slate {
             mat.gpuData.metallicFactor = jMat.value("metallic", 0.0f);
             mat.gpuData.transmissionFactor = jMat.value("transmission", 0.0f);
             mat.gpuData.ior = jMat.value("ior", 1.45f);
+            mat.gpuData.aoFactor = jMat.value("ao", 1.0f);
 
             outMaterials.push_back(mat);
         }
@@ -78,6 +79,7 @@ namespace slate {
             jMat["metallic"] = mat.gpuData.metallicFactor;
             jMat["transmission"] = mat.gpuData.transmissionFactor;
             jMat["ior"] = mat.gpuData.ior;
+            jMat["ao"] = mat.gpuData.aoFactor;
             jMaterials.push_back(jMat);
         }
         j["materials"] = jMaterials;
@@ -229,13 +231,6 @@ namespace slate {
 
                 uint32_t finalMaterialId = (materialId >= 0) ? static_cast<uint32_t>(materialId) + materialIdOffset : materialIdOffset;
 
-                glm::vec3 faceColor(0.8f, 0.8f, 0.8f);
-                if (materialId >= 0 && materialId < static_cast<int>(materials.size())) {
-                    faceColor = glm::vec3(materials[materialId].diffuse[0],
-                                          materials[materialId].diffuse[1],
-                                          materials[materialId].diffuse[2]);
-                }
-
                 auto getVertex = [&](size_t v_idx) -> Vertex {
                     tinyobj::index_t idx = shape.mesh.indices[index_offset + v_idx];
 
@@ -262,7 +257,9 @@ namespace slate {
                         };
                     }
 
-                    return Vertex{pos, faceColor, normal, texCoord};
+                    glm::vec3 vertexColor(1.0f);
+
+                    return Vertex{pos, vertexColor, normal, texCoord};
                 };
 
                 auto addVertex = [&](const Vertex& v) -> uint16_t {
