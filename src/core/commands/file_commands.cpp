@@ -98,6 +98,9 @@ namespace slate {
 
                 if (!shapeResult.HasError()) {
                     JPH::ShapeRefC shape = shapeResult.Get();
+
+                    newMesh->setBaseShape(shape);
+
                     glm::vec3 initialPos = glm::vec3(newMesh->getModelMatrix()[3]);
 
                     JPH::EMotionType motionType = JPH::EMotionType::Dynamic;
