@@ -470,6 +470,16 @@ namespace slate {
             }
             materialDropdown->setSize(glm::vec2(panelWidth - 16.0f, baseMaterialContentHeight));
 
+            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? colorPickerExtraH : 0.0f;
+            float baseFloatRowY[4] = { 75.0f, 125.0f, 175.0f, 225.0f };
+
+            for (int i = 0; i < 4; ++i) {
+                if (m_matFloatInputBoxes[i]) {
+                    glm::vec2 currentPos = m_matFloatInputBoxes[i]->getPosition();
+                    m_matFloatInputBoxes[i]->setPosition(glm::vec2(currentPos.x, baseFloatRowY[i] + matOffset));
+                }
+            }
+
             float materialHeight = materialDropdown->isExpanded() ? materialDropdown->getSize().y : materialDropdown->getHeaderHeight();
             float physicsPosY = materialPosY + materialHeight + 8.0f;
             physicsDropdown->setPosition(glm::vec2(8.0f, physicsPosY));
