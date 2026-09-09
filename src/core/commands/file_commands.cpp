@@ -133,6 +133,8 @@ namespace slate {
                         objectLayer
                     );
 
+                    bodySettings.mAllowDynamicOrKinematic = true;
+
                     auto& bodyInterface = context.physicsEngine->getPhysicsSystem().GetBodyInterface();
                     JPH::Body* body = bodyInterface.CreateBody(bodySettings);
 
