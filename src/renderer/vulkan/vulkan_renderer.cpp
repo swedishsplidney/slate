@@ -17,6 +17,7 @@
 #include "resources/mesh_loader.hpp"
 #include "resources/grid_generator.hpp"
 #include "resources/gizmo_generator.hpp"
+#include "resources/texture_loader.hpp"
 
 namespace slate {
 
@@ -45,12 +46,13 @@ namespace slate {
         createUIDescriptorSetLayout();
         createUniformBuffers();
         createMaterialBuffers();
+        createFontTexture();
+        createDefaultTexture();
         createDescriptorPoolAndSets();
         createGraphicsPipeline();
         createGridPipeline();
         createGizmoPipeline();
         createUIGraphicsPipeline();
-        createFontTexture();
         createUIDescriptorSet();
         createGridMesh();
         createGizmoMesh();
@@ -1149,6 +1151,32 @@ namespace slate {
         }
     }
 
+    void VulkanRenderer::createDefaultTexture() {
+        uint32_t width = 1;
+        uint32_t height = 1;
+        std::vector<uint8_t> whitePixel = {255, 255, 255, 255};
+
+        VkDeviceSize imageSize = width * height * 4;
+
+        createImage(width, height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_textureImage, m_textureImageMemory);
+
+        m_textureImageView = createImageView(m_textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+        if (vkCreateSampler(m_device, &samplerInfo, nullptr, &m_textureSampler) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create default texture sampler!");
+        }
+    }
+
     void VulkanRenderer::createDescriptorPoolAndSets() {
         std::array<VkDescriptorPoolSize, 3> poolSizes{};
 
@@ -1203,8 +1231,8 @@ namespace slate {
 
             VkDescriptorImageInfo imageInfo{};
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = m_sceneColorImageView;
-            imageInfo.sampler = m_sceneColorSampler;
+            imageInfo.imageView = m_textureImageView;
+            imageInfo.sampler = m_textureSampler;
 
             std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
@@ -1276,10 +1304,19 @@ namespace slate {
         materialLayoutBinding.descriptorCount = 1;
         materialLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+        samplerLayoutBinding.binding = 1;
+        samplerLayoutBinding.descriptorCount = 1;
+        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerLayoutBinding.pImmutableSamplers = nullptr;
+        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 2> materialBindings = { materialLayoutBinding, samplerLayoutBinding };
+
         VkDescriptorSetLayoutCreateInfo materialLayoutInfo{};
         materialLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        materialLayoutInfo.bindingCount = 1;
-        materialLayoutInfo.pBindings = &materialLayoutBinding;
+        materialLayoutInfo.bindingCount = static_cast<uint32_t>(materialBindings.size());
+        materialLayoutInfo.pBindings = materialBindings.data();
 
         if (vkCreateDescriptorSetLayout(m_device, &materialLayoutInfo, nullptr, &m_materialDescriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create material descriptor set layout!");
@@ -1779,6 +1816,133 @@ namespace slate {
         }
     }
 
+    bool VulkanRenderer::loadTexture(const std::string& filepath, VkImage& outImage, VkDeviceMemory& outMemory, VkImageView& outImageView, VkSampler& outSampler) {
+        LoadedImage img = TextureLoader::loadImage(filepath);
+        if (!img.success || !img.pixels) {
+            return false;
+        }
+
+        VkDeviceSize imageSize = img.width * img.height * 4;
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        vkMapMemory(m_device, stagingBufferMemory, 0, imageSize, 0, &data);
+        memcpy(data, img.pixels, static_cast<size_t>(imageSize));
+        vkUnmapMemory(m_device, stagingBufferMemory);
+
+        TextureLoader::freeImage(img);
+
+        createImage(img.width, img.height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, outImage, outMemory);
+
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = outImage;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = {0, 0, 0};
+        region.imageExtent = {static_cast<uint32_t>(img.width), static_cast<uint32_t>(img.height), 1};
+
+        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, outImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        endSingleTimeCommands(commandBuffer);
+
+        vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+        vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+
+        outImageView = createImageView(outImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+        if (vkCreateSampler(m_device, &samplerInfo, nullptr, &outSampler) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create texture sampler!");
+        }
+
+        return true;
+    }
+
+    bool VulkanRenderer::importAndApplyTexture(const std::string& filepath) {
+        if (!loadTexture(filepath, m_textureImage, m_textureImageMemory, m_textureImageView, m_textureSampler)) {
+            return false;
+        }
+
+        vkDeviceWaitIdle(m_device);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageInfo.imageView = m_textureImageView;
+            imageInfo.sampler = m_textureSampler;
+
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = m_materialDescriptorSets[i];
+            descriptorWrite.dstBinding = 1;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pImageInfo = &imageInfo;
+
+            vkUpdateDescriptorSets(m_device, 1, &descriptorWrite, 0, nullptr);
+        }
+
+        return true;
+    }
+
     VkCommandBuffer VulkanRenderer::beginSingleTimeCommands() {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -2263,6 +2427,24 @@ namespace slate {
     }
 
     void VulkanRenderer::cleanup() {
+
+        if (m_textureSampler != VK_NULL_HANDLE) {
+            vkDestroySampler(m_device, m_textureSampler, nullptr);
+            m_textureSampler = VK_NULL_HANDLE;
+        }
+        if (m_textureImageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(m_device, m_textureImageView, nullptr);
+            m_textureImageView = VK_NULL_HANDLE;
+        }
+        if (m_textureImage != VK_NULL_HANDLE) {
+            vkDestroyImage(m_device, m_textureImage, nullptr);
+            m_textureImage = VK_NULL_HANDLE;
+        }
+        if (m_textureImageMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(m_device, m_textureImageMemory, nullptr);
+            m_textureImageMemory = VK_NULL_HANDLE;
+        }
+
         if (m_gizmoPipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(m_device, m_gizmoPipeline, nullptr);
             m_gizmoPipeline = VK_NULL_HANDLE;

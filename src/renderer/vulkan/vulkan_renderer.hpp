@@ -116,6 +116,9 @@ namespace slate {
             m_viewportSize = size;
         }
 
+        bool loadTexture(const std::string& filepath, VkImage& outImage, VkDeviceMemory& outMemory, VkImageView& outImageView, VkSampler& outSampler);
+        bool importAndApplyTexture(const std::string& filepath);
+
     private:
         void createInstance();
         void createSurface();
@@ -183,7 +186,7 @@ namespace slate {
         VkDeviceMemory m_depthImageMemory = VK_NULL_HANDLE;
         VkImageView m_depthImageView = VK_NULL_HANDLE;
         VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
-        
+
         void createDepthResources();
         void createImage(uint32_t width, uint32_t height, VkFormat format,
                          VkImageTiling tiling, VkImageUsageFlags usage,
@@ -277,6 +280,13 @@ namespace slate {
 
         glm::vec2 m_viewportOffset{0.0f};
         glm::vec2 m_viewportSize{0.0f};
+
+        VkImage m_textureImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_textureImageMemory = VK_NULL_HANDLE;
+        VkImageView m_textureImageView = VK_NULL_HANDLE;
+        VkSampler m_textureSampler = VK_NULL_HANDLE;
+
+        void createDefaultTexture();
     };
 
 }

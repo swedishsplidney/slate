@@ -15,7 +15,8 @@ struct MaterialGPU {
     float transmissionFactor;
     float ior;
     float aoFactor;
-    float padding[3];
+    int hasTexture;
+    float padding[2];
 };
 
 layout(push_constant) uniform PushConstants {
@@ -32,6 +33,8 @@ layout(std140, set = 0, binding = 0) uniform GlobalUBO {
 } ubo;
 
 layout(set = 0, binding = 1) uniform sampler2D sceneColorTexture;
+
+layout(set = 1, binding = 1) uniform sampler2D materialTexture;
 
 layout(std430, set = 1, binding = 0) readonly buffer MaterialBuffer {
     MaterialGPU materials[];
@@ -120,7 +123,10 @@ void main() {
     float ao = clamp(mat.aoFactor > 0.0 ? mat.aoFactor : 1.0, 0.0, 1.0);
 
     vec3 vColor = length(fragColor) > 0.001 ? fragColor : vec3(1.0);
-    vec3 albedo = mat.albedoFactor.rgb * vColor;
+
+    vec4 baseAlbedo = mat.hasTexture > 0 ? texture(materialTexture, fragTexCoord) * mat.albedoFactor : mat.albedoFactor;
+    vec3 albedo = baseAlbedo.rgb * vColor;
+    baseAlpha = clamp(baseAlbedo.a, 0.0, 1.0);
 
     float iorF0 = pow((ior - 1.0) / (ior + 1.0), 2.0);
     vec3 dielectricF0 = vec3(iorF0);

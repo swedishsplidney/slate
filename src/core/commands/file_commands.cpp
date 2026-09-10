@@ -1,6 +1,7 @@
 #include "file_commands.hpp"
 #include "renderer/vulkan/vulkan_renderer.hpp"
 #include "resources/mesh_loader.hpp"
+#include "resources/texture_loader.hpp"
 #include "ui/ui_manager.hpp"
 #include "portable-file-dialogs.h"
 #include "physics/physics_engine.hpp"
@@ -123,6 +124,24 @@ namespace slate {
                                         objectLayer = slate::Layers::NON_MOVING;
                                     }
                                 }
+
+                                if (j.contains("materials") && j["materials"].is_array() && !globalMaterials.empty()) {
+                                    auto& matData = globalMaterials[materialsBeforeLoad];
+                                    const auto& jsonMat = j["materials"][0];
+
+                                    if (jsonMat.contains("albedoTexture")) {
+                                        std::string texRelPath = jsonMat["albedoTexture"];
+                                        fs::path fullTexPath = path.parent_path() / texRelPath;
+
+                                        LoadedImage loadedImg = TextureLoader::loadImage(fullTexPath.string());
+                                        if (loadedImg.success) {
+                                            std::cout << "[texture] loaded albedo texture: " << fullTexPath.string() << "\n";
+
+                                            TextureLoader::freeImage(loadedImg);
+                                        }
+                                    }
+                                }
+
                             } catch (...) {
                             }
                         }

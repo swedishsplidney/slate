@@ -1,8 +1,3 @@
-#pragma once
-
-#include <glm/glm.hpp>
-#include <string>
-
 namespace slate {
 
     struct alignas(16) MaterialGPU {
@@ -12,12 +7,14 @@ namespace slate {
         float transmissionFactor{0.0f};
         float ior{1.45f};
         float aoFactor{1.0f};
-        glm::vec3 padding{0.0f};
+        int hasTexture = 0;
+        float padding[2];
     };
 
     struct Material {
         std::string name;
         uint32_t materialId = 0;
+        std::string albedoTexturePath;
         MaterialGPU gpuData;
     };
 

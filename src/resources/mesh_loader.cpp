@@ -59,6 +59,11 @@ namespace slate {
             mat.gpuData.ior = jMat.value("ior", 1.45f);
             mat.gpuData.aoFactor = jMat.value("ao", 1.0f);
 
+            mat.albedoTexturePath = jMat.value("albedoTexture", "");
+            if (!mat.albedoTexturePath.empty()) {
+                mat.gpuData.hasTexture = 1;
+            }
+
             outMaterials.push_back(mat);
         }
         return true;
@@ -80,6 +85,7 @@ namespace slate {
             jMat["transmission"] = mat.gpuData.transmissionFactor;
             jMat["ior"] = mat.gpuData.ior;
             jMat["ao"] = mat.gpuData.aoFactor;
+            jMat["albedoTexture"] = mat.albedoTexturePath;
             jMaterials.push_back(jMat);
         }
         j["materials"] = jMaterials;
