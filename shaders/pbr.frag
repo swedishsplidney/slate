@@ -49,8 +49,13 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (vec3(1.0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+vec3 envBRDFApprox(vec3 F0, float roughness, float NoV) {
+    const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+    const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+    vec4 r = roughness * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28 * NoV)) * r.x + r.y;
+    vec2 AB = vec2(-1.04, 0.04) * a004 + r.zw;
+    return F0 * AB.x + vec3(AB.y);
 }
 
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
@@ -106,6 +111,7 @@ void main() {
 
     vec3 V = normalize(ubo.cameraPos - fragPosWorld);
 
+    // albedo
     vec4 baseAlbedo = (mat.hasAlbedoTexture > 0) ? texture(albedoMap, fragTexCoord) : mat.albedoFactor;
     vec3 vertexTint = (length(fragColor) > 0.001) ? fragColor : vec3(1.0);
     vec3 albedo = baseAlbedo.rgb * vertexTint;
@@ -127,7 +133,7 @@ void main() {
     metallic  = clamp(metallic, 0.0, 1.0);
     ao        = clamp(ao, 0.0, 1.0);
 
-    // normal mapping
+    // normal
     vec3 N = N_base;
     if (mat.hasNormalTexture > 0) {
         vec3 tangentNormal = texture(normalMap, fragTexCoord).rgb * 2.0 - 1.0;
@@ -143,6 +149,11 @@ void main() {
 
         N = normalize(TBN * tangentNormal);
     }
+
+    // specular aa
+    float normalVariance = length(dFdx(N)) + length(dFdy(N));
+    float geometricRoughness = clamp(normalVariance * 0.4, 0.0, 0.3);
+    float effectiveRoughness = clamp(sqrt(roughness * roughness + geometricRoughness), 0.04, 1.0);
 
     float ior = mat.ior <= 1.0 ? 1.5 : mat.ior;
     float transmission = clamp(mat.transmissionFactor, 0.0, 1.0) * (1.0 - metallic);
@@ -161,44 +172,42 @@ void main() {
     float NdotL = max(dot(N, L), 0.0);
     float LdotH = max(dot(L, H), 0.0);
 
-    float NDF = DistributionGGX(N, H, roughness);
-    float G   = GeometrySmith(N, V, L, roughness);
+    float NDF = DistributionGGX(N, H, effectiveRoughness);
+    float G   = GeometrySmith(N, V, L, effectiveRoughness);
     vec3  F   = fresnelSchlick(max(dot(H, V), 0.0), F0);
 
     vec3 specularDirect = (NDF * G * F) / max(4.0 * NdotV * NdotL + 0.0001, 0.0001);
     vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
-    vec3 diffuseDirect = computeDisneyDiffuse(albedo, roughness, NdotV, NdotL, LdotH);
+    vec3 diffuseDirect = computeDisneyDiffuse(albedo, effectiveRoughness, NdotV, NdotL, LdotH);
     vec3 directLight = (kD * diffuseDirect + specularDirect) * lightColor * NdotL;
 
-    // ibl
-    vec3 skyColor = vec3(0.55, 0.6, 0.65);
-    vec3 groundColor = vec3(0.1, 0.1, 0.12);
+    // smooth energized ibl
+    vec3 skyColor = vec3(0.45, 0.5, 0.55);
+    vec3 groundColor = vec3(0.08, 0.08, 0.1);
 
     vec3 irradiance = mix(groundColor, skyColor, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
-    vec3 blurredR = normalize(mix(R, N, roughness * 0.5));
+    vec3 blurredR = normalize(mix(R, N, effectiveRoughness * 0.6));
     vec3 baseEnv = mix(groundColor, skyColor, clamp(blurredR.y * 0.5 + 0.5, 0.0, 1.0));
 
-    vec3 keyLightDir  = normalize(vec3( 0.7,  0.4,  0.5));
-    vec3 fillLightDir = normalize(vec3(-0.7,  0.2, -0.5));
-    vec3 rimLightDir  = normalize(vec3( 0.0, -0.5,  0.8));
+    vec3 keyLightDir  = normalize(vec3( 0.6,  0.5,  0.6));
+    vec3 fillLightDir = normalize(vec3(-0.6,  0.3, -0.5));
+    vec3 rimLightDir  = normalize(vec3( 0.0, -0.4,  0.8));
 
-    float keyDot  = max(dot(blurredR, keyLightDir), 0.0);
-    float fillDot = max(dot(blurredR, fillLightDir), 0.0);
-    float rimDot  = max(dot(blurredR, rimLightDir), 0.0);
+    float keyDot  = smoothstep(0.0, 1.0, dot(blurredR, keyLightDir));
+    float fillDot = smoothstep(0.0, 1.0, dot(blurredR, fillLightDir));
+    float rimDot  = smoothstep(0.0, 1.0, dot(blurredR, rimLightDir));
 
-    vec3 multiLights = (vec3(1.2, 1.1, 0.9) * pow(keyDot,  5.0)) +
-    (vec3(0.4, 0.5, 0.6) * pow(fillDot, 4.0)) +
-    (vec3(0.5, 0.7, 0.8) * pow(rimDot,  6.0));
+    vec3 multiLights = (vec3(0.55, 0.5, 0.45) * pow(keyDot,  3.0)) +
+    (vec3(0.18, 0.22, 0.26) * pow(fillDot, 2.5)) +
+    (vec3(0.2, 0.25, 0.3) * pow(rimDot,  3.0));
 
-    vec3 radiance = baseEnv + (multiLights * (1.0 - roughness * 0.9));
+    vec3 radiance = baseEnv + (multiLights * (1.0 - effectiveRoughness * 0.85));
 
-    vec3 F_ambient = fresnelSchlickRoughness(NdotV, F0, roughness);
-    vec3 kD_amb = (vec3(1.0) - F_ambient) * (1.0 - metallic);
+    vec3 F_env = envBRDFApprox(F0, effectiveRoughness, NdotV);
+    vec3 kD_amb = (vec3(1.0) - F_env) * (1.0 - metallic);
 
     vec3 ambientDiffuse = kD_amb * albedo * irradiance * ao;
-
-    float roughnessSpecularAttenuation = (1.0 - roughness * 0.85);
-    vec3 ambientSpecular = radiance * F_ambient * ao * roughnessSpecularAttenuation;
+    vec3 ambientSpecular = radiance * F_env * ao;
 
     vec3 color = ambientDiffuse + ambientSpecular + directLight;
 
@@ -217,7 +226,7 @@ void main() {
             vec3 backgroundScene = texture(sceneColorTexture, refractUV).rgb;
             vec3 glassSpecular = (specularDirect * lightColor * NdotL) + ambientSpecular;
 
-            vec3 transmittedLight = backgroundScene * albedo * (vec3(1.0) - F_ambient);
+            vec3 transmittedLight = backgroundScene * albedo * (vec3(1.0) - F_env);
             color = mix(color, transmittedLight + glassSpecular, transmission);
         }
     }
