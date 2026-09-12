@@ -69,6 +69,8 @@ namespace slate {
         void createFontTexture(const unsigned char* pixels = nullptr, uint32_t width = 0, uint32_t height = 0);
         void createUIDescriptorSet();
 
+        void createMaterialDescriptorSets(Material& mat);
+
         std::vector<Material> m_globalMaterials;
 
         std::vector<Material>& getGlobalMaterials() { return m_globalMaterials; }
@@ -117,7 +119,7 @@ namespace slate {
         }
 
         bool loadTexture(const std::string& filepath, VkImage& outImage, VkDeviceMemory& outMemory, VkImageView& outImageView, VkSampler& outSampler);
-        bool importAndApplyTexture(const std::string& filepath);
+        bool importAndApplyTexture(const std::string& filepath, uint32_t materialIndex);
 
     private:
         void createInstance();

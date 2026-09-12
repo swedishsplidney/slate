@@ -46,6 +46,8 @@ namespace slate {
         outMaterials.clear();
         if (!j.contains("materials") || !j["materials"].is_array()) return false;
 
+        fs::path parentDir = jsonPath.parent_path();
+
         for (const auto& jMat : j["materials"]) {
             Material mat{};
             mat.name = jMat.value("name", "DefaultMaterial");
@@ -60,8 +62,22 @@ namespace slate {
             mat.gpuData.aoFactor = jMat.value("ao", 1.0f);
 
             mat.albedoTexturePath = jMat.value("albedoTexture", "");
-            if (!mat.albedoTexturePath.empty()) {
-                mat.gpuData.hasTexture = 1;
+
+            // check if it contains a valid path
+            if (!mat.albedoTexturePath.empty() && mat.albedoTexturePath != "models/") {
+                fs::path fullTexPath = parentDir / mat.albedoTexturePath;
+
+                if (fs::exists(fullTexPath) && fs::is_regular_file(fullTexPath)) {
+                    mat.gpuData.hasTexture = 1;
+                } else {
+                    std::cout << "[mesh_loader] warning: json texture path '" << mat.albedoTexturePath
+                              << "' specified, but the file does not exist...\n";
+                    mat.gpuData.hasTexture = 0;
+                    mat.albedoTexturePath = "";
+                }
+            } else {
+                mat.gpuData.hasTexture = 0;
+                mat.albedoTexturePath = "";
             }
 
             outMaterials.push_back(mat);
@@ -256,11 +272,30 @@ namespace slate {
                     }
 
                     glm::vec2 texCoord(0.0f);
-                    if (idx.texcoord_index >= 0 && (2 * idx.texcoord_index + 1) < attrib.texcoords.size()) {
+                    bool hasValidUVs = (idx.texcoord_index >= 0 && (2 * static_cast<size_t>(idx.texcoord_index) + 1) < attrib.texcoords.size());
+
+                    if (hasValidUVs) {
                         texCoord = {
                             attrib.texcoords[2 * idx.texcoord_index + 0],
                             1.0f - attrib.texcoords[2 * idx.texcoord_index + 1]
                         };
+                    } else {
+                        // fallback normal-driven box projection
+                        glm::vec3 absNormal = glm::abs(normal);
+
+                        if (absNormal.z >= absNormal.x && absNormal.z >= absNormal.y) {
+                            texCoord = { pos.x * 0.1f, pos.y * 0.1f };
+                        } else if (absNormal.y >= absNormal.x && absNormal.y >= absNormal.z) {
+                            texCoord = { pos.x * 0.1f, pos.z * 0.1f };
+                        } else {
+                            texCoord = { pos.y * 0.1f, pos.z * 0.1f };
+                        }
+
+                        static bool warned = false;
+                        if (!warned) {
+                            std::cout << "[mesh_loader] warning: missing UV coords, generating box projected fallback!\n";
+                            warned = true;
+                        }
                     }
 
                     glm::vec3 vertexColor(1.0f);
@@ -339,7 +374,7 @@ namespace slate {
                         }
 
                         outIndices.push_back(addVertex(faceVerts[i0]));
-                        outIndices.push_back(addVertex(getVertex(i1)));
+                        outIndices.push_back(addVertex(faceVerts[i1]));
                         outIndices.push_back(addVertex(faceVerts[i2]));
                     }
                 }

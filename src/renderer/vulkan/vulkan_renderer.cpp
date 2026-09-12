@@ -753,9 +753,8 @@ namespace slate {
         glm::vec3 cameraPos = glm::vec3(glm::inverse(viewMatrix)[3]);
         updateUniformBuffer(imageIndex, cameraPos);
 
-        std::array<VkDescriptorSet, 2> descriptorSetsToBind = {
-            m_globalDescriptorSets[m_currentFrame],
-            m_materialDescriptorSets[m_currentFrame]
+        std::array<VkDescriptorSet, 1> descriptorSetsToBind = {
+            m_globalDescriptorSets[m_currentFrame]
         };
 
         // opaque
@@ -782,6 +781,24 @@ namespace slate {
         for (const auto& mesh : m_sceneMeshes) {
             if (!mesh || mesh->isTransparent()) continue;
             mesh->bind(commandBuffer);
+
+            uint32_t matId = mesh->getMaterialId();
+            if (matId >= m_globalMaterials.size() || m_globalMaterials[matId].descriptorSets.empty()) {
+                matId = 0;
+            }
+
+            if (matId < m_globalMaterials.size() && !m_globalMaterials[matId].descriptorSets.empty()) {
+                VkDescriptorSet matDescSet = m_globalMaterials[matId].descriptorSets[m_currentFrame];
+
+                vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    m_pipelineLayout,
+                    1,
+                    1, &matDescSet,
+                    0, nullptr
+                );
+            }
 
             struct PushConstants {
                 glm::mat4 modelMatrix;
@@ -897,6 +914,24 @@ namespace slate {
         for (const auto& mesh : m_sceneMeshes) {
             if (!mesh || !mesh->isTransparent()) continue;
             mesh->bind(commandBuffer);
+
+            uint32_t matId = mesh->getMaterialId();
+            if (matId >= m_globalMaterials.size() || m_globalMaterials[matId].descriptorSets.empty()) {
+                matId = 0;
+            }
+
+            if (matId < m_globalMaterials.size() && !m_globalMaterials[matId].descriptorSets.empty()) {
+                VkDescriptorSet matDescSet = m_globalMaterials[matId].descriptorSets[m_currentFrame];
+
+                vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    m_pipelineLayout,
+                    1,
+                    1, &matDescSet,
+                    0, nullptr
+                );
+            }
 
             struct PushConstants {
                 glm::mat4 modelMatrix;
@@ -1155,12 +1190,68 @@ namespace slate {
         uint32_t width = 1;
         uint32_t height = 1;
         std::vector<uint8_t> whitePixel = {255, 255, 255, 255};
+        VkDeviceSize imageSize = 4;
 
-        VkDeviceSize imageSize = width * height * 4;
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        vkMapMemory(m_device, stagingBufferMemory, 0, imageSize, 0, &data);
+        memcpy(data, whitePixel.data(), static_cast<size_t>(imageSize));
+        vkUnmapMemory(m_device, stagingBufferMemory);
 
         createImage(width, height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_textureImage, m_textureImageMemory);
+
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_textureImage;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = {0, 0, 0};
+        region.imageExtent = {width, height, 1};
+
+        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, m_textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        endSingleTimeCommands(commandBuffer);
+
+        vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+        vkFreeMemory(m_device, stagingBufferMemory, nullptr);
 
         m_textureImageView = createImageView(m_textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 
@@ -1171,6 +1262,16 @@ namespace slate {
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
         if (vkCreateSampler(m_device, &samplerInfo, nullptr, &m_textureSampler) != VK_SUCCESS) {
             throw std::runtime_error("failed to create default texture sampler!");
@@ -1261,16 +1362,30 @@ namespace slate {
             matBufferInfo.offset = 0;
             matBufferInfo.range = sizeof(MaterialGPU) * MAX_MATERIALS;
 
-            VkWriteDescriptorSet matWrite{};
-            matWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            matWrite.dstSet = m_materialDescriptorSets[i];
-            matWrite.dstBinding = 0;
-            matWrite.dstArrayElement = 0;
-            matWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            matWrite.descriptorCount = 1;
-            matWrite.pBufferInfo = &matBufferInfo;
+            VkDescriptorImageInfo matImageInfo{};
+            matImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            matImageInfo.imageView = m_textureImageView;
+            matImageInfo.sampler = m_textureSampler;
 
-            vkUpdateDescriptorSets(m_device, 1, &matWrite, 0, nullptr);
+            std::array<VkWriteDescriptorSet, 2> matWrites{};
+
+            matWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            matWrites[0].dstSet = m_materialDescriptorSets[i];
+            matWrites[0].dstBinding = 0;
+            matWrites[0].dstArrayElement = 0;
+            matWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            matWrites[0].descriptorCount = 1;
+            matWrites[0].pBufferInfo = &matBufferInfo;
+
+            matWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            matWrites[1].dstSet = m_materialDescriptorSets[i];
+            matWrites[1].dstBinding = 1;
+            matWrites[1].dstArrayElement = 0;
+            matWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            matWrites[1].descriptorCount = 1;
+            matWrites[1].pImageInfo = &matImageInfo;
+
+            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(matWrites.size()), matWrites.data(), 0, nullptr);
         }
     }
 
@@ -1320,6 +1435,51 @@ namespace slate {
 
         if (vkCreateDescriptorSetLayout(m_device, &materialLayoutInfo, nullptr, &m_materialDescriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create material descriptor set layout!");
+        }
+    }
+
+    void VulkanRenderer::createMaterialDescriptorSets(Material& mat) {
+        mat.descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = m_descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &m_materialDescriptorSetLayout;
+
+            if (vkAllocateDescriptorSets(m_device, &allocInfo, &mat.descriptorSets[i]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to allocate per-material descriptor set!");
+            }
+
+            VkDescriptorBufferInfo matBufferInfo{};
+            matBufferInfo.buffer = m_materialBuffers[i];
+            matBufferInfo.offset = 0;
+            matBufferInfo.range = sizeof(MaterialGPU) * MAX_MATERIALS;
+
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageInfo.imageView = (mat.textureImageView != VK_NULL_HANDLE) ? mat.textureImageView : m_textureImageView;
+            imageInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = mat.descriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].dstArrayElement = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &matBufferInfo;
+
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = mat.descriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].dstArrayElement = 0;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pImageInfo = &imageInfo;
+
+            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -1915,29 +2075,68 @@ namespace slate {
         return true;
     }
 
-    bool VulkanRenderer::importAndApplyTexture(const std::string& filepath) {
-        if (!loadTexture(filepath, m_textureImage, m_textureImageMemory, m_textureImageView, m_textureSampler)) {
+    bool VulkanRenderer::importAndApplyTexture(const std::string& filepath, uint32_t materialIndex) {
+        if (materialIndex >= m_globalMaterials.size()) return false;
+        auto& mat = m_globalMaterials[materialIndex];
+
+        if (!loadTexture(filepath, mat.textureImage, mat.textureImageMemory, mat.textureImageView, mat.textureSampler)) {
             return false;
         }
 
         vkDeviceWaitIdle(m_device);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            MaterialGPU* mappedMaterials = static_cast<MaterialGPU*>(m_materialBuffersMapped[i]);
+            if (mappedMaterials) {
+                mappedMaterials[materialIndex].hasTexture = 1;
+            }
+        }
+
+        if (mat.descriptorSets.empty()) {
+            mat.descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                VkDescriptorSetAllocateInfo allocInfo{};
+                allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                allocInfo.descriptorPool = m_descriptorPool;
+                allocInfo.descriptorSetCount = 1;
+                allocInfo.pSetLayouts = &m_materialDescriptorSetLayout;
+
+                if (vkAllocateDescriptorSets(m_device, &allocInfo, &mat.descriptorSets[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to allocate per-material descriptor set!");
+                }
+            }
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorBufferInfo matBufferInfo{};
+            matBufferInfo.buffer = m_materialBuffers[i];
+            matBufferInfo.offset = 0;
+            matBufferInfo.range = sizeof(MaterialGPU) * MAX_MATERIALS;
+
             VkDescriptorImageInfo imageInfo{};
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = m_textureImageView;
-            imageInfo.sampler = m_textureSampler;
+            imageInfo.imageView = mat.textureImageView;
+            imageInfo.sampler = mat.textureSampler;
 
-            VkWriteDescriptorSet descriptorWrite{};
-            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrite.dstSet = m_materialDescriptorSets[i];
-            descriptorWrite.dstBinding = 1;
-            descriptorWrite.dstArrayElement = 0;
-            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            descriptorWrite.descriptorCount = 1;
-            descriptorWrite.pImageInfo = &imageInfo;
+            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
-            vkUpdateDescriptorSets(m_device, 1, &descriptorWrite, 0, nullptr);
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = mat.descriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].dstArrayElement = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &matBufferInfo;
+
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = mat.descriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].dstArrayElement = 0;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pImageInfo = &imageInfo;
+
+            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
 
         return true;

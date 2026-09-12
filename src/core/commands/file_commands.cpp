@@ -80,6 +80,11 @@ namespace slate {
 
             context.renderer->flushMaterialsToGPU();
 
+            auto& globalMaterialsRef = context.renderer->getGlobalMaterials();
+            for (size_t i = materialsBeforeLoad; i < globalMaterialsRef.size(); ++i) {
+                context.renderer->createMaterialDescriptorSets(globalMaterialsRef[i]);
+            }
+
             auto newMesh = std::make_unique<Mesh>(
                 context.renderer->getDevice(),
                 context.renderer->getPhysicalDevice(),
@@ -131,13 +136,22 @@ namespace slate {
 
                                     if (jsonMat.contains("albedoTexture")) {
                                         std::string texRelPath = jsonMat["albedoTexture"];
-                                        fs::path fullTexPath = path.parent_path() / texRelPath;
 
-                                        LoadedImage loadedImg = TextureLoader::loadImage(fullTexPath.string());
-                                        if (loadedImg.success) {
-                                            std::cout << "[texture] loaded albedo texture: " << fullTexPath.string() << "\n";
+                                        if (!texRelPath.empty() && texRelPath != "models/") {
+                                            fs::path fullTexPath = path.parent_path() / texRelPath;
 
-                                            TextureLoader::freeImage(loadedImg);
+                                            // make sure its a real file
+                                            if (fs::exists(fullTexPath) && fs::is_regular_file(fullTexPath)) {
+                                                if (context.renderer->importAndApplyTexture(fullTexPath.string(), primaryMaterialId)) {
+                                                    std::cout << "[texture] successfully applied albedo texture: " << fullTexPath.string() << " to material ID " << primaryMaterialId << "\n";
+                                                } else {
+                                                    std::cerr << "[texture error] failed to apply texture: " << fullTexPath.string() << "\n";
+                                                }
+                                            } else {
+                                                std::cerr << "[texture error] texture path specified ('" << texRelPath << "'), but it does not exist or is a directory.\n";
+                                            }
+                                        } else {
+                                            std::cout << "[texture] skipping invalid or placeholder texture path: '" << texRelPath << "'\n";
                                         }
                                     }
                                 }

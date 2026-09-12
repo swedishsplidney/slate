@@ -16,6 +16,13 @@ namespace slate {
         uint32_t materialId = 0;
         std::string albedoTexturePath;
         MaterialGPU gpuData;
+
+        VkImage textureImage = VK_NULL_HANDLE;
+        VkDeviceMemory textureImageMemory = VK_NULL_HANDLE;
+        VkImageView textureImageView = VK_NULL_HANDLE;
+        VkSampler textureSampler = VK_NULL_HANDLE;
+
+        std::vector<VkDescriptorSet> descriptorSets;
     };
 
 }

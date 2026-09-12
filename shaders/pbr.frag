@@ -104,7 +104,7 @@ vec3 toneMapPBRNeutral(vec3 color) {
 }
 
 void main() {
-    uint activeMaterialId = push.materialId;
+    uint activeMaterialId = fragMaterialIndex;
     MaterialGPU mat = materialBuffer.materials[activeMaterialId];
 
     vec3 N = normalize(fragNormal);
@@ -124,7 +124,11 @@ void main() {
 
     vec3 vColor = length(fragColor) > 0.001 ? fragColor : vec3(1.0);
 
-    vec4 baseAlbedo = mat.hasTexture > 0 ? texture(materialTexture, fragTexCoord) * mat.albedoFactor : mat.albedoFactor;
+    vec4 baseAlbedo = mat.albedoFactor;
+    if (mat.hasTexture > 0) {
+        baseAlbedo = texture(materialTexture, fragTexCoord);
+    }
+
     vec3 albedo = baseAlbedo.rgb * vColor;
     baseAlpha = clamp(baseAlbedo.a, 0.0, 1.0);
 
