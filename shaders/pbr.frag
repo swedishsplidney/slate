@@ -15,8 +15,10 @@ struct MaterialGPU {
     float transmissionFactor;
     float ior;
     float aoFactor;
-    int hasTexture;
-    float padding[2];
+    int hasAlbedoTexture;
+    int hasNormalTexture;
+    int hasOrmTexture;
+    float padding[1];
 };
 
 layout(push_constant) uniform PushConstants {
@@ -34,7 +36,9 @@ layout(std140, set = 0, binding = 0) uniform GlobalUBO {
 
 layout(set = 0, binding = 1) uniform sampler2D sceneColorTexture;
 
-layout(set = 1, binding = 1) uniform sampler2D materialTexture;
+layout(set = 1, binding = 1) uniform sampler2D albedoMap;
+layout(set = 1, binding = 2) uniform sampler2D normalMap;
+layout(set = 1, binding = 3) uniform sampler2D ormMap;
 
 layout(std430, set = 1, binding = 0) readonly buffer MaterialBuffer {
     MaterialGPU materials[];
@@ -124,12 +128,48 @@ void main() {
 
     vec3 vColor = length(fragColor) > 0.001 ? fragColor : vec3(1.0);
 
+    // albedo
     vec4 baseAlbedo = mat.albedoFactor;
-    if (mat.hasTexture > 0) {
-        baseAlbedo = texture(materialTexture, fragTexCoord);
+    if (mat.hasAlbedoTexture > 0) {
+        baseAlbedo = texture(albedoMap, fragTexCoord);
+    }
+    vec3 albedo = baseAlbedo.rgb * (length(fragColor) > 0.001 ? fragColor : vec3(1.0));
+
+    // orm
+    roughness = mat.roughnessFactor;
+    metallic  = mat.metallicFactor;
+    ao        = mat.aoFactor;
+
+    if (mat.hasOrmTexture > 0) {
+        vec3 ormSample = texture(ormMap, fragTexCoord).rgb;
+        ao        *= ormSample.r;
+        roughness *= ormSample.g;
+        metallic  *= ormSample.b;
     }
 
-    vec3 albedo = baseAlbedo.rgb * vColor;
+    roughness = clamp(roughness, 0.04, 1.0);
+    metallic  = clamp(metallic, 0.0, 1.0);
+    ao        = clamp(ao, 0.0, 1.0);
+
+    // normal
+    N = normalize(fragNormal);
+    if (!gl_FrontFacing) N = -N;
+
+    if (mat.hasNormalTexture > 0) {
+        vec3 tangentNormal = texture(normalMap, fragTexCoord).rgb * 2.0 - 1.0;
+
+        vec3 Q1  = dFdx(fragPosWorld);
+        vec3 Q2  = dFdy(fragPosWorld);
+        vec2 st1 = dFdx(fragTexCoord);
+        vec2 st2 = dFdy(fragTexCoord);
+
+        vec3 T = normalize(Q1 * st2.t - Q2 * st1.t);
+        vec3 B = normalize(cross(N, T));
+        mat3 TBN = mat3(T, B, N);
+
+        N = normalize(TBN * tangentNormal);
+    }
+
     baseAlpha = clamp(baseAlbedo.a, 0.0, 1.0);
 
     float iorF0 = pow((ior - 1.0) / (ior + 1.0), 2.0);

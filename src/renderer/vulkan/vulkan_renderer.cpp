@@ -1186,6 +1186,71 @@ namespace slate {
         }
     }
 
+    void VulkanRenderer::createTextureImageFromData(const std::vector<uint8_t>& pixels, uint32_t width, uint32_t height, VkFormat format, VkImage& image, VkDeviceMemory& memory) {
+        VkDeviceSize imageSize = pixels.size();
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        vkMapMemory(m_device, stagingBufferMemory, 0, imageSize, 0, &data);
+        memcpy(data, pixels.data(), static_cast<size_t>(imageSize));
+        vkUnmapMemory(m_device, stagingBufferMemory);
+
+        createImage(width, height, format, VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
+
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = {0, 0, 0};
+        region.imageExtent = {width, height, 1};
+
+        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        endSingleTimeCommands(commandBuffer);
+
+        vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+        vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+    }
+
     void VulkanRenderer::createDefaultTexture() {
         uint32_t width = 1;
         uint32_t height = 1;
@@ -1255,6 +1320,16 @@ namespace slate {
 
         m_textureImageView = createImageView(m_textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 
+        // default normal map
+        std::vector<uint8_t> normalPixel = {128, 128, 255, 255};
+        createTextureImageFromData(normalPixel, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, m_defaultNormalImage, m_defaultNormalImageMemory);
+        m_defaultNormalImageView = createImageView(m_defaultNormalImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        // default orm map
+        std::vector<uint8_t> ormPixel = {255, 255, 255, 255};
+        createTextureImageFromData(ormPixel, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, m_defaultOrmImage, m_defaultOrmImageMemory);
+        m_defaultOrmImageView = createImageView(m_defaultOrmImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -1285,16 +1360,16 @@ namespace slate {
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
 
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 10);
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 100);
 
         poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
+        poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 50);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>((MAX_FRAMES_IN_FLIGHT * 2) + 10);
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 50);
 
         if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
@@ -1413,20 +1488,33 @@ namespace slate {
             throw std::runtime_error("failed to create global descriptor set layout!");
         }
 
-        VkDescriptorSetLayoutBinding materialLayoutBinding{};
-        materialLayoutBinding.binding = 0;
-        materialLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        materialLayoutBinding.descriptorCount = 1;
-        materialLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutBinding materialBufferBinding{};
+        materialBufferBinding.binding = 0;
+        materialBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        materialBufferBinding.descriptorCount = 1;
+        materialBufferBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-        samplerLayoutBinding.binding = 1;
-        samplerLayoutBinding.descriptorCount = 1;
-        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerLayoutBinding.pImmutableSamplers = nullptr;
-        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutBinding albedoLayoutBinding{};
+        albedoLayoutBinding.binding = 1;
+        albedoLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        albedoLayoutBinding.descriptorCount = 1;
+        albedoLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        std::array<VkDescriptorSetLayoutBinding, 2> materialBindings = { materialLayoutBinding, samplerLayoutBinding };
+        VkDescriptorSetLayoutBinding normalLayoutBinding{};
+        normalLayoutBinding.binding = 2;
+        normalLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        normalLayoutBinding.descriptorCount = 1;
+        normalLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutBinding ormLayoutBinding{};
+        ormLayoutBinding.binding = 3;
+        ormLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        ormLayoutBinding.descriptorCount = 1;
+        ormLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 4> materialBindings = {
+            materialBufferBinding, albedoLayoutBinding, normalLayoutBinding, ormLayoutBinding
+        };
 
         VkDescriptorSetLayoutCreateInfo materialLayoutInfo{};
         materialLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1456,28 +1544,57 @@ namespace slate {
             matBufferInfo.offset = 0;
             matBufferInfo.range = sizeof(MaterialGPU) * MAX_MATERIALS;
 
-            VkDescriptorImageInfo imageInfo{};
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = (mat.textureImageView != VK_NULL_HANDLE) ? mat.textureImageView : m_textureImageView;
-            imageInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+            // albedo
+            VkDescriptorImageInfo albedoInfo{};
+            albedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            albedoInfo.imageView = (mat.albedoImageView != VK_NULL_HANDLE) ? mat.albedoImageView : m_textureImageView;
+            albedoInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
 
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+            // normal
+            VkDescriptorImageInfo normalInfo{};
+            normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            normalInfo.imageView = (mat.normalImageView != VK_NULL_HANDLE) ? mat.normalImageView : m_defaultNormalImageView;
+            normalInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
 
+            // orm
+            VkDescriptorImageInfo ormInfo{};
+            ormInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            ormInfo.imageView = (mat.ormImageView != VK_NULL_HANDLE) ? mat.ormImageView : m_defaultOrmImageView;
+            ormInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
+
+            // storage
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = mat.descriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
-            descriptorWrites[0].dstArrayElement = 0;
             descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             descriptorWrites[0].descriptorCount = 1;
             descriptorWrites[0].pBufferInfo = &matBufferInfo;
 
+            // albedo
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[1].dstSet = mat.descriptorSets[i];
             descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].dstArrayElement = 0;
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pImageInfo = &imageInfo;
+            descriptorWrites[1].pImageInfo = &albedoInfo;
+
+            // normal
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = mat.descriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pImageInfo = &normalInfo;
+
+            // orm
+            descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[3].dstSet = mat.descriptorSets[i];
+            descriptorWrites[3].dstBinding = 3;
+            descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[3].descriptorCount = 1;
+            descriptorWrites[3].pImageInfo = &ormInfo;
 
             vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
@@ -2079,7 +2196,8 @@ namespace slate {
         if (materialIndex >= m_globalMaterials.size()) return false;
         auto& mat = m_globalMaterials[materialIndex];
 
-        if (!loadTexture(filepath, mat.textureImage, mat.textureImageMemory, mat.textureImageView, mat.textureSampler)) {
+        // load to albedo slots
+        if (!loadTexture(filepath, mat.albedoImage, mat.albedoImageMemory, mat.albedoImageView, mat.textureSampler)) {
             return false;
         }
 
@@ -2088,7 +2206,7 @@ namespace slate {
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             MaterialGPU* mappedMaterials = static_cast<MaterialGPU*>(m_materialBuffersMapped[i]);
             if (mappedMaterials) {
-                mappedMaterials[materialIndex].hasTexture = 1;
+                mappedMaterials[materialIndex].hasAlbedoTexture = 1;
             }
         }
 
@@ -2113,17 +2231,26 @@ namespace slate {
             matBufferInfo.offset = 0;
             matBufferInfo.range = sizeof(MaterialGPU) * MAX_MATERIALS;
 
-            VkDescriptorImageInfo imageInfo{};
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = mat.textureImageView;
-            imageInfo.sampler = mat.textureSampler;
+            VkDescriptorImageInfo albedoInfo{};
+            albedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            albedoInfo.imageView = (mat.albedoImageView != VK_NULL_HANDLE) ? mat.albedoImageView : m_textureImageView;
+            albedoInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
 
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+            VkDescriptorImageInfo normalInfo{};
+            normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            normalInfo.imageView = (mat.normalImageView != VK_NULL_HANDLE) ? mat.normalImageView : m_defaultNormalImageView;
+            normalInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            VkDescriptorImageInfo ormInfo{};
+            ormInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            ormInfo.imageView = (mat.ormImageView != VK_NULL_HANDLE) ? mat.ormImageView : m_defaultOrmImageView;
+            ormInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = mat.descriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
-            descriptorWrites[0].dstArrayElement = 0;
             descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             descriptorWrites[0].descriptorCount = 1;
             descriptorWrites[0].pBufferInfo = &matBufferInfo;
@@ -2131,10 +2258,201 @@ namespace slate {
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[1].dstSet = mat.descriptorSets[i];
             descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].dstArrayElement = 0;
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pImageInfo = &imageInfo;
+            descriptorWrites[1].pImageInfo = &albedoInfo;
+
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = mat.descriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pImageInfo = &normalInfo;
+
+            descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[3].dstSet = mat.descriptorSets[i];
+            descriptorWrites[3].dstBinding = 3;
+            descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[3].descriptorCount = 1;
+            descriptorWrites[3].pImageInfo = &ormInfo;
+
+            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        }
+
+        return true;
+    }
+
+    bool VulkanRenderer::importAndApplyNormalTexture(const std::string& filepath, uint32_t materialIndex) {
+        if (materialIndex >= m_globalMaterials.size()) return false;
+        auto& mat = m_globalMaterials[materialIndex];
+
+        if (!loadTexture(filepath, mat.normalImage, mat.normalImageMemory, mat.normalImageView, mat.textureSampler)) {
+            return false;
+        }
+
+        vkDeviceWaitIdle(m_device);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            MaterialGPU* mappedMaterials = static_cast<MaterialGPU*>(m_materialBuffersMapped[i]);
+            if (mappedMaterials) {
+                mappedMaterials[materialIndex].hasNormalTexture = 1;
+            }
+        }
+
+        if (mat.descriptorSets.empty()) {
+            mat.descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                VkDescriptorSetAllocateInfo allocInfo{};
+                allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                allocInfo.descriptorPool = m_descriptorPool;
+                allocInfo.descriptorSetCount = 1;
+                allocInfo.pSetLayouts = &m_materialDescriptorSetLayout;
+
+                if (vkAllocateDescriptorSets(m_device, &allocInfo, &mat.descriptorSets[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to allocate per-material descriptor set!");
+                }
+            }
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorBufferInfo matBufferInfo{};
+            matBufferInfo.buffer = m_materialBuffers[i];
+            matBufferInfo.offset = 0;
+            matBufferInfo.range = sizeof(MaterialGPU) * MAX_MATERIALS;
+
+            VkDescriptorImageInfo albedoInfo{};
+            albedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            albedoInfo.imageView = (mat.albedoImageView != VK_NULL_HANDLE) ? mat.albedoImageView : m_textureImageView;
+            albedoInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            VkDescriptorImageInfo normalInfo{};
+            normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            normalInfo.imageView = (mat.normalImageView != VK_NULL_HANDLE) ? mat.normalImageView : m_defaultNormalImageView;
+            normalInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            VkDescriptorImageInfo ormInfo{};
+            ormInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            ormInfo.imageView = (mat.ormImageView != VK_NULL_HANDLE) ? mat.ormImageView : m_defaultOrmImageView;
+            ormInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
+
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = mat.descriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &matBufferInfo;
+
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = mat.descriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pImageInfo = &albedoInfo;
+
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = mat.descriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pImageInfo = &normalInfo;
+
+            descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[3].dstSet = mat.descriptorSets[i];
+            descriptorWrites[3].dstBinding = 3;
+            descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[3].descriptorCount = 1;
+            descriptorWrites[3].pImageInfo = &ormInfo;
+
+            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        }
+
+        return true;
+    }
+
+    bool VulkanRenderer::importAndApplyOrmTexture(const std::string& filepath, uint32_t materialIndex) {
+        if (materialIndex >= m_globalMaterials.size()) return false;
+        auto& mat = m_globalMaterials[materialIndex];
+
+        if (!loadTexture(filepath, mat.ormImage, mat.ormImageMemory, mat.ormImageView, mat.textureSampler)) {
+            return false;
+        }
+
+        vkDeviceWaitIdle(m_device);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            MaterialGPU* mappedMaterials = static_cast<MaterialGPU*>(m_materialBuffersMapped[i]);
+            if (mappedMaterials) {
+                mappedMaterials[materialIndex].hasOrmTexture = 1;
+            }
+        }
+
+        if (mat.descriptorSets.empty()) {
+            mat.descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                VkDescriptorSetAllocateInfo allocInfo{};
+                allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                allocInfo.descriptorPool = m_descriptorPool;
+                allocInfo.descriptorSetCount = 1;
+                allocInfo.pSetLayouts = &m_materialDescriptorSetLayout;
+
+                if (vkAllocateDescriptorSets(m_device, &allocInfo, &mat.descriptorSets[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to allocate per-material descriptor set!");
+                }
+            }
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorBufferInfo matBufferInfo{};
+            matBufferInfo.buffer = m_materialBuffers[i];
+            matBufferInfo.offset = 0;
+            matBufferInfo.range = sizeof(MaterialGPU) * MAX_MATERIALS;
+
+            VkDescriptorImageInfo albedoInfo{};
+            albedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            albedoInfo.imageView = (mat.albedoImageView != VK_NULL_HANDLE) ? mat.albedoImageView : m_textureImageView;
+            albedoInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            VkDescriptorImageInfo normalInfo{};
+            normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            normalInfo.imageView = (mat.normalImageView != VK_NULL_HANDLE) ? mat.normalImageView : m_defaultNormalImageView;
+            normalInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            VkDescriptorImageInfo ormInfo{};
+            ormInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            ormInfo.imageView = (mat.ormImageView != VK_NULL_HANDLE) ? mat.ormImageView : m_defaultOrmImageView;
+            ormInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
+
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = mat.descriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &matBufferInfo;
+
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = mat.descriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pImageInfo = &albedoInfo;
+
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = mat.descriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pImageInfo = &normalInfo;
+
+            descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[3].dstSet = mat.descriptorSets[i];
+            descriptorWrites[3].dstBinding = 3;
+            descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[3].descriptorCount = 1;
+            descriptorWrites[3].pImageInfo = &ormInfo;
 
             vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }

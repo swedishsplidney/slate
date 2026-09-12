@@ -120,6 +120,8 @@ namespace slate {
 
         bool loadTexture(const std::string& filepath, VkImage& outImage, VkDeviceMemory& outMemory, VkImageView& outImageView, VkSampler& outSampler);
         bool importAndApplyTexture(const std::string& filepath, uint32_t materialIndex);
+        bool importAndApplyNormalTexture(const std::string& filepath, uint32_t materialIndex);
+        bool importAndApplyOrmTexture(const std::string& filepath, uint32_t materialIndex);
 
     private:
         void createInstance();
@@ -288,7 +290,17 @@ namespace slate {
         VkImageView m_textureImageView = VK_NULL_HANDLE;
         VkSampler m_textureSampler = VK_NULL_HANDLE;
 
+
+        VkImage m_defaultNormalImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_defaultNormalImageMemory = VK_NULL_HANDLE;
+        VkImageView m_defaultNormalImageView = VK_NULL_HANDLE;
+
+        VkImage m_defaultOrmImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_defaultOrmImageMemory = VK_NULL_HANDLE;
+        VkImageView m_defaultOrmImageView = VK_NULL_HANDLE;
+
         void createDefaultTexture();
+        void createTextureImageFromData(const std::vector<uint8_t>& pixels, uint32_t width, uint32_t height, VkFormat format, VkImage& image, VkDeviceMemory& memory);
     };
 
 }

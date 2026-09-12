@@ -62,22 +62,49 @@ namespace slate {
             mat.gpuData.aoFactor = jMat.value("ao", 1.0f);
 
             mat.albedoTexturePath = jMat.value("albedoTexture", "");
+            mat.normalTexturePath = jMat.value("normalTexture", "");
+            mat.ormTexturePath = jMat.value("ormTexture", "");
 
-            // check if it contains a valid path
+            // check + load albedo
             if (!mat.albedoTexturePath.empty() && mat.albedoTexturePath != "models/") {
                 fs::path fullTexPath = parentDir / mat.albedoTexturePath;
-
                 if (fs::exists(fullTexPath) && fs::is_regular_file(fullTexPath)) {
-                    mat.gpuData.hasTexture = 1;
+                    mat.gpuData.hasAlbedoTexture = 1;
                 } else {
-                    std::cout << "[mesh_loader] warning: json texture path '" << mat.albedoTexturePath
-                              << "' specified, but the file does not exist...\n";
-                    mat.gpuData.hasTexture = 0;
+                    mat.gpuData.hasAlbedoTexture = 0;
                     mat.albedoTexturePath = "";
                 }
             } else {
-                mat.gpuData.hasTexture = 0;
+                mat.gpuData.hasAlbedoTexture = 0;
                 mat.albedoTexturePath = "";
+            }
+
+            // check + load normal
+            if (!mat.normalTexturePath.empty() && mat.normalTexturePath != "models/") {
+                fs::path fullTexPath = parentDir / mat.normalTexturePath;
+                if (fs::exists(fullTexPath) && fs::is_regular_file(fullTexPath)) {
+                    mat.gpuData.hasNormalTexture = 1;
+                } else {
+                    mat.gpuData.hasNormalTexture = 0;
+                    mat.normalTexturePath = "";
+                }
+            } else {
+                mat.gpuData.hasNormalTexture = 0;
+                mat.normalTexturePath = "";
+            }
+
+            // check + load orm
+            if (!mat.ormTexturePath.empty() && mat.ormTexturePath != "models/") {
+                fs::path fullTexPath = parentDir / mat.ormTexturePath;
+                if (fs::exists(fullTexPath) && fs::is_regular_file(fullTexPath)) {
+                    mat.gpuData.hasOrmTexture = 1;
+                } else {
+                    mat.gpuData.hasOrmTexture = 0;
+                    mat.ormTexturePath = "";
+                }
+            } else {
+                mat.gpuData.hasOrmTexture = 0;
+                mat.ormTexturePath = "";
             }
 
             outMaterials.push_back(mat);
@@ -102,6 +129,8 @@ namespace slate {
             jMat["ior"] = mat.gpuData.ior;
             jMat["ao"] = mat.gpuData.aoFactor;
             jMat["albedoTexture"] = mat.albedoTexturePath;
+            jMat["normalTexture"] = mat.normalTexturePath;
+            jMat["ormTexture"] = mat.ormTexturePath;
             jMaterials.push_back(jMat);
         }
         j["materials"] = jMaterials;

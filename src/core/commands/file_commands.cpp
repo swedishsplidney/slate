@@ -154,6 +154,26 @@ namespace slate {
                                             std::cout << "[texture] skipping invalid or placeholder texture path: '" << texRelPath << "'\n";
                                         }
                                     }
+
+                                    if (jsonMat.contains("normalTexture")) {
+                                        std::string normRelPath = jsonMat["normalTexture"];
+                                        if (!normRelPath.empty() && normRelPath != "models/") {
+                                            fs::path fullNormPath = path.parent_path() / normRelPath;
+                                            if (fs::exists(fullNormPath) && fs::is_regular_file(fullNormPath)) {
+                                                context.renderer->importAndApplyNormalTexture(fullNormPath.string(), primaryMaterialId);
+                                            }
+                                        }
+                                    }
+
+                                    if (jsonMat.contains("ormTexture")) {
+                                        std::string ormRelPath = jsonMat["ormTexture"];
+                                        if (!ormRelPath.empty() && ormRelPath != "models/") {
+                                            fs::path fullOrmPath = path.parent_path() / ormRelPath;
+                                            if (fs::exists(fullOrmPath) && fs::is_regular_file(fullOrmPath)) {
+                                                context.renderer->importAndApplyOrmTexture(fullOrmPath.string(), primaryMaterialId);
+                                            }
+                                        }
+                                    }
                                 }
 
                             } catch (...) {
