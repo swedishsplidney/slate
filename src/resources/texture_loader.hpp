@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <vector>
+#include <future>
 
 struct LoadedImage {
     unsigned char* pixels = nullptr;
@@ -13,6 +15,8 @@ struct LoadedImage {
 class TextureLoader {
 public:
     static LoadedImage loadImage(const std::string& filepath);
-
     static void freeImage(LoadedImage& image);
+
+    // concurrency is good frfr
+    static std::vector<LoadedImage> loadImagesParallel(const std::vector<std::string>& filepaths);
 };

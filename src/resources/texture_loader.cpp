@@ -1,6 +1,8 @@
 #include "texture_loader.hpp"
 
 #include <iostream>
+#include <vector>
+#include <future>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -28,4 +30,24 @@ void TextureLoader::freeImage(LoadedImage& image) {
         image.pixels = nullptr;
         image.success = false;
     }
+}
+
+std::vector<LoadedImage> TextureLoader::loadImagesParallel(const std::vector<std::string>& filepaths) {
+    std::vector<std::future<LoadedImage>> futures;
+    futures.reserve(filepaths.size());
+
+    for (const auto& path : filepaths) {
+        futures.push_back(std::async(std::launch::async, [path]() {
+            return loadImage(path);
+        }));
+    }
+
+    std::vector<LoadedImage> results;
+    results.reserve(filepaths.size());
+
+    for (auto& fut : futures) {
+        results.push_back(fut.get());
+    }
+
+    return results;
 }
