@@ -24,12 +24,16 @@ namespace slate {
         }
     };
 
-    struct GlobalUBO {
-        alignas(16) glm::vec3 cameraPos;
-        alignas(16) glm::vec3 lightDirection{0.5f, 1.0f, 0.5f};
-        alignas(16) glm::vec3 lightColor{1.0f, 0.98f, 0.95f};
-        alignas(4)  float lightIntensity = 2.5f;
+    struct alignas(16) GlobalUBO {
+        glm::vec3 cameraPos;
+        float exposure = 1.0f;
+        glm::vec3 lightDirection;
+        float _pad0 = 0.0f;
+        glm::vec3 lightColor;
+        float lightIntensity;
+        glm::vec4 ambientCube[6]{};
     };
+    static_assert(sizeof(GlobalUBO) == 144, "GlobalUBO must match pbr.frag std140 layout");
 
     struct UniformBufferObject {
         alignas(16) glm::mat4 view;
@@ -298,6 +302,10 @@ namespace slate {
         VkImage m_defaultOrmImage = VK_NULL_HANDLE;
         VkDeviceMemory m_defaultOrmImageMemory = VK_NULL_HANDLE;
         VkImageView m_defaultOrmImageView = VK_NULL_HANDLE;
+
+        VkImage m_defaultEmissiveImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_defaultEmissiveImageMemory = VK_NULL_HANDLE;
+        VkImageView m_defaultEmissiveImageView = VK_NULL_HANDLE;
 
         void createDefaultTexture();
         void createTextureImageFromData(const std::vector<uint8_t>& pixels, uint32_t width, uint32_t height, VkFormat format, VkImage& image, VkDeviceMemory& memory);

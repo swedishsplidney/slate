@@ -700,6 +700,15 @@ namespace slate {
         ubo.lightColor = glm::vec3(1.0f, 0.95f, 0.9f);
         ubo.lightIntensity = 3.0f;
 
+        ubo.exposure = 1.0f;
+        ubo.ambientCube[0] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
+        ubo.ambientCube[1] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
+        ubo.ambientCube[2] = glm::vec4(0.55f, 0.60f, 0.65f, 0.0f);
+        ubo.ambientCube[2] = glm::vec4(0.55f, 0.60f, 0.65f, 0.0f);
+        ubo.ambientCube[3] = glm::vec4(0.08f, 0.08f, 0.10f, 0.0f);
+        ubo.ambientCube[4] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
+        ubo.ambientCube[5] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
+
         memcpy(m_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 
@@ -1330,6 +1339,11 @@ namespace slate {
         createTextureImageFromData(ormPixel, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, m_defaultOrmImage, m_defaultOrmImageMemory);
         m_defaultOrmImageView = createImageView(m_defaultOrmImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
 
+        // default emissive map
+        std::vector<uint8_t> emissivePixel = {0, 0, 0, 255};
+        createTextureImageFromData(emissivePixel, 1, 1, VK_FORMAT_R8G8B8A8_SRGB, m_defaultEmissiveImage, m_defaultEmissiveImageMemory);
+        m_defaultEmissiveImageView = createImageView(m_defaultEmissiveImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -1512,8 +1526,14 @@ namespace slate {
         ormLayoutBinding.descriptorCount = 1;
         ormLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        std::array<VkDescriptorSetLayoutBinding, 4> materialBindings = {
-            materialBufferBinding, albedoLayoutBinding, normalLayoutBinding, ormLayoutBinding
+        VkDescriptorSetLayoutBinding emissiveLayoutBinding{};
+        emissiveLayoutBinding.binding = 4;
+        emissiveLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        emissiveLayoutBinding.descriptorCount = 1;
+        emissiveLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 5> materialBindings = {
+            materialBufferBinding, albedoLayoutBinding, normalLayoutBinding, ormLayoutBinding, emissiveLayoutBinding
         };
 
         VkDescriptorSetLayoutCreateInfo materialLayoutInfo{};
@@ -1562,7 +1582,13 @@ namespace slate {
             ormInfo.imageView = (mat.ormImageView != VK_NULL_HANDLE) ? mat.ormImageView : m_defaultOrmImageView;
             ormInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
 
-            std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
+            // emmsissive
+            VkDescriptorImageInfo emissiveInfo{};
+            emissiveInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            emissiveInfo.imageView = (mat.emissiveImageView != VK_NULL_HANDLE) ? mat.emissiveImageView : m_defaultEmissiveImageView;
+            emissiveInfo.sampler = (mat.textureSampler != VK_NULL_HANDLE) ? mat.textureSampler : m_textureSampler;
+
+            std::array<VkWriteDescriptorSet, 5> descriptorWrites{};
 
             // storage
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1595,6 +1621,14 @@ namespace slate {
             descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrites[3].descriptorCount = 1;
             descriptorWrites[3].pImageInfo = &ormInfo;
+
+            // emmeisive
+            descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[4].dstSet = mat.descriptorSets[i];
+            descriptorWrites[4].dstBinding = 4;
+            descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[4].descriptorCount = 1;
+            descriptorWrites[4].pImageInfo = &emissiveInfo;
 
             vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }

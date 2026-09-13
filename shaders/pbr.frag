@@ -10,15 +10,22 @@ layout(location = 0) out vec4 outColor;
 
 struct MaterialGPU {
     vec4 albedoFactor;
+    vec4 emissiveFactor;
+
     float roughnessFactor;
     float metallicFactor;
     float transmissionFactor;
     float ior;
+
     float aoFactor;
+    float rimIntensity;
+    float rimExponent;
+    float alphaCutoff;
+
     int hasAlbedoTexture;
     int hasNormalTexture;
     int hasOrmTexture;
-    float padding[1];
+    int hasEmissiveTexture;
 };
 
 layout(push_constant) uniform PushConstants {
@@ -28,16 +35,20 @@ layout(push_constant) uniform PushConstants {
 } push;
 
 layout(std140, set = 0, binding = 0) uniform GlobalUBO {
-    vec3 cameraPos;
-    vec3 lightDirection;
-    vec3 lightColor;
+    vec3  cameraPos;
+    float exposure;
+    vec3  lightDirection;
+    float _pad0;
+    vec3  lightColor;
     float lightIntensity;
+    vec4  ambientCube[6];
 } ubo;
 
 layout(set = 0, binding = 1) uniform sampler2D sceneColorTexture;
 layout(set = 1, binding = 1) uniform sampler2D albedoMap;
 layout(set = 1, binding = 2) uniform sampler2D normalMap;
 layout(set = 1, binding = 3) uniform sampler2D ormMap;
+layout(set = 1, binding = 4) uniform sampler2D emissiveMap;
 
 layout(std430, set = 1, binding = 0) readonly buffer MaterialBuffer {
     MaterialGPU materials[];
@@ -88,6 +99,31 @@ vec3 computeDisneyDiffuse(vec3 albedo, float roughness, float NdotV, float NdotL
     return albedo * (lightScatter * viewScatter * energyFactor / PI);
 }
 
+// ambient cube
+vec3 sampleAmbientCube(vec3 n) {
+    vec3 n2 = n * n;
+    vec3 xColor = mix(ubo.ambientCube[1].rgb, ubo.ambientCube[0].rgb, step(0.0, n.x));
+    vec3 yColor = mix(ubo.ambientCube[3].rgb, ubo.ambientCube[2].rgb, step(0.0, n.y));
+    vec3 zColor = mix(ubo.ambientCube[5].rgb, ubo.ambientCube[4].rgb, step(0.0, n.z));
+    return n2.x * xColor + n2.y * yColor + n2.z * zColor;
+}
+
+// normal
+mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
+    vec3 dp1 = dFdx(p);
+    vec3 dp2 = dFdy(p);
+    vec2 duv1 = dFdx(uv);
+    vec2 duv2 = dFdy(uv);
+
+    vec3 dp2perp = cross(dp2, N);
+    vec3 dp1perp = cross(N, dp1);
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+
+    float invmax = inversesqrt(max(dot(T, T), dot(B, B)));
+    return mat3(T * invmax, B * invmax, N);
+}
+
 vec3 toneMapPBRNeutral(vec3 color) {
     const float startCompression = 0.8 - 0.04;
     const float desaturation = 0.15;
@@ -117,6 +153,11 @@ void main() {
     vec3 albedo = baseAlbedo.rgb * vertexTint;
     float baseAlpha = clamp(baseAlbedo.a, 0.0, 1.0);
 
+    // alpha test
+    if (mat.alphaCutoff > 0.0 && baseAlpha < mat.alphaCutoff) {
+        discard;
+    }
+
     // orm
     float roughness = mat.roughnessFactor;
     float metallic  = mat.metallicFactor;
@@ -137,16 +178,7 @@ void main() {
     vec3 N = N_base;
     if (mat.hasNormalTexture > 0) {
         vec3 tangentNormal = texture(normalMap, fragTexCoord).rgb * 2.0 - 1.0;
-
-        vec3 Q1  = dFdx(fragPosWorld);
-        vec3 Q2  = dFdy(fragPosWorld);
-        vec2 st1 = dFdx(fragTexCoord);
-        vec2 st2 = dFdy(fragTexCoord);
-
-        vec3 T = normalize(Q1 * st2.t - Q2 * st1.t);
-        vec3 B = normalize(cross(N_base, T));
-        mat3 TBN = mat3(T, B, N_base);
-
+        mat3 TBN = cotangentFrame(N_base, fragPosWorld, fragTexCoord);
         N = normalize(TBN * tangentNormal);
     }
 
@@ -181,35 +213,35 @@ void main() {
     vec3 diffuseDirect = computeDisneyDiffuse(albedo, effectiveRoughness, NdotV, NdotL, LdotH);
     vec3 directLight = (kD * diffuseDirect + specularDirect) * lightColor * NdotL;
 
-    // smooth energized ibl
-    vec3 skyColor = vec3(0.45, 0.5, 0.55);
-    vec3 groundColor = vec3(0.08, 0.08, 0.1);
-
-    vec3 irradiance = mix(groundColor, skyColor, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
+    // ambient
+    vec3 irradiance = sampleAmbientCube(N);
     vec3 blurredR = normalize(mix(R, N, effectiveRoughness * 0.6));
-    vec3 baseEnv = mix(groundColor, skyColor, clamp(blurredR.y * 0.5 + 0.5, 0.0, 1.0));
-
-    vec3 keyLightDir  = normalize(vec3( 0.6,  0.5,  0.6));
-    vec3 fillLightDir = normalize(vec3(-0.6,  0.3, -0.5));
-    vec3 rimLightDir  = normalize(vec3( 0.0, -0.4,  0.8));
-
-    float keyDot  = smoothstep(0.0, 1.0, dot(blurredR, keyLightDir));
-    float fillDot = smoothstep(0.0, 1.0, dot(blurredR, fillLightDir));
-    float rimDot  = smoothstep(0.0, 1.0, dot(blurredR, rimLightDir));
-
-    vec3 multiLights = (vec3(0.55, 0.5, 0.45) * pow(keyDot,  3.0)) +
-    (vec3(0.18, 0.22, 0.26) * pow(fillDot, 2.5)) +
-    (vec3(0.2, 0.25, 0.3) * pow(rimDot,  3.0));
-
-    vec3 radiance = baseEnv + (multiLights * (1.0 - effectiveRoughness * 0.85));
+    vec3 radiance = sampleAmbientCube(blurredR);
 
     vec3 F_env = envBRDFApprox(F0, effectiveRoughness, NdotV);
     vec3 kD_amb = (vec3(1.0) - F_env) * (1.0 - metallic);
 
+    // specular occlusion
+    float specOcclusion = clamp(pow(NdotV + ao, exp2(-16.0 * effectiveRoughness - 1.0)) - 1.0 + ao, 0.0, 1.0);
+
     vec3 ambientDiffuse = kD_amb * albedo * irradiance * ao;
-    vec3 ambientSpecular = radiance * F_env * ao;
+    vec3 ambientSpecular = radiance * F_env * specOcclusion;
 
     vec3 color = ambientDiffuse + ambientSpecular + directLight;
+
+    // rim light
+    if (mat.rimIntensity > 0.0) {
+        float rimExp = max(mat.rimExponent, 0.5);
+        float rimFactor = pow(clamp(1.0 - NdotV, 0.0, 1.0), rimExp);
+        color += mat.rimIntensity * rimFactor * mix(irradiance, lightColor, 0.5) * ao;
+    }
+
+    // emissive
+    vec3 emissive = mat.emissiveFactor.rgb * mat.emissiveFactor.a;
+    if (mat.hasEmissiveTexture > 0) {
+        emissive *= texture(emissiveMap, fragTexCoord).rgb;
+    }
+    color += emissive;
 
     // transmission
     if (transmission > 0.01) {
@@ -227,13 +259,14 @@ void main() {
             vec3 glassSpecular = (specularDirect * lightColor * NdotL) + ambientSpecular;
 
             vec3 transmittedLight = backgroundScene * albedo * (vec3(1.0) - F_env);
-            color = mix(color, transmittedLight + glassSpecular, transmission);
+            color = mix(color, transmittedLight + glassSpecular + emissive, transmission);
         }
     }
 
+    color *= ubo.exposure > 0.0 ? ubo.exposure : 1.0;
     color = toneMapPBRNeutral(color);
 
-    float fresnelAlpha = mix(baseAlpha * 0.2, baseAlpha, pow(1.0 - NdotV, 3.5));
-    float nonMetalAlpha = mix(fresnelAlpha, 1.0, transmission);
-    outColor = vec4(color, mix(nonMetalAlpha, 1.0, metallic));
+    float glassEdgeAlpha = mix(baseAlpha * 0.2, baseAlpha, pow(1.0 - NdotV, 3.5));
+    float dielectricAlpha = mix(baseAlpha, glassEdgeAlpha, transmission);
+    outColor = vec4(color, mix(dielectricAlpha, 1.0, metallic));
 }
