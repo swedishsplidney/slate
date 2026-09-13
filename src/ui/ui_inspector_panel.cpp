@@ -6,6 +6,14 @@
 
 namespace slate {
 
+    namespace {
+        constexpr float kColorPickerExtraH = 270.0f;
+        constexpr float kMaterialRowSpacing = 50.0f;
+        constexpr float kMaterialRowLabelBase = 19.0f;
+        constexpr int   kNumMaterialFloats = 7;
+        constexpr float kMaterialBaseContentHeight = 490.0f;
+    }
+
     UIInspectorPanel::UIInspectorPanel(const std::string& name, glm::vec2 position, glm::vec2 size)
         : UIElement(name, position, size) {
         setDrawsBackground(true);
@@ -105,7 +113,7 @@ namespace slate {
         auto materialDropdown = std::make_shared<UIDropdown>(
             "MaterialDropdown",
             glm::vec2(8.0f, 240.0f),
-            glm::vec2(panelWidth - 16.0f, 290.0f),
+            glm::vec2(panelWidth - 16.0f, kMaterialBaseContentHeight),
             "Material",
             true
         );
@@ -118,6 +126,7 @@ namespace slate {
         float fullFieldX = 50.0f;
         float fullFieldWidth = sectionWidth - 60.0f;
 
+        // albedo color
         auto colorPicker = std::make_shared<UIColorPicker>(
             "MaterialColorPicker",
             glm::vec2(fullFieldX, 25.0f),
@@ -142,13 +151,38 @@ namespace slate {
         materialDropdown->addContentElement(colorPicker);
         m_colorPicker = colorPicker;
 
-        float floatRowY[4] = { 75.0f, 125.0f, 175.0f, 225.0f };
-        float defaultFloatVals[4] = { 0.5f, 0.0f, 1.5f, 0.0f };
+        // emissive color
+        auto emissiveColorPicker = std::make_shared<UIColorPicker>(
+            "MaterialEmissiveColorPicker",
+            glm::vec2(fullFieldX, 75.0f),
+            glm::vec2(fullFieldWidth, 22.0f)
+        );
+        emissiveColorPicker->setFontLoader(m_fontLoader);
 
-        for (int i = 0; i < 4; ++i) {
+        emissiveColorPicker->setOnColorChanged([this](const glm::vec4& col) {
+            m_emissiveColorValues = col;
+            if (m_onMaterialVec4Changed) {
+                m_onMaterialVec4Changed(1, m_emissiveColorValues);
+            }
+        });
+
+        emissiveColorPicker->setOnLayoutChanged([this]() {
+            updateChildLayouts();
+            if (m_onLayoutChanged) {
+                m_onLayoutChanged();
+            }
+        });
+
+        materialDropdown->addContentElement(emissiveColorPicker);
+        m_emissiveColorPicker = emissiveColorPicker;
+
+        float defaultFloatVals[kNumMaterialFloats] = { 0.5f, 0.0f, 1.5f, 0.0f, 0.0f, 2.0f, 0.0f };
+        float floatBaseY = 125.0f;
+
+        for (int i = 0; i < kNumMaterialFloats; ++i) {
             auto inputBox = std::make_shared<UIInputBox>(
                 "MatFloatBox_" + std::to_string(i),
-                glm::vec2(fullFieldX, floatRowY[i]),
+                glm::vec2(fullFieldX, floatBaseY + i * kMaterialRowSpacing),
                 glm::vec2(fullFieldWidth, 22.0f),
                 defaultFloatVals[i]
             );
@@ -159,10 +193,22 @@ namespace slate {
             std::weak_ptr<UIInputBox> weakBox = inputBox;
             inputBox->setOnValueChanged([this, i, weakBox](float val) {
                 float clamped = val;
-                if (i == 0 || i == 1 || i == 3) {
-                    clamped = std::clamp(val, 0.0f, 1.0f);
-                } else if (i == 2) {
-                    clamped = std::max(1.0f, val);
+                switch (i) {
+                    case 0: // roughness
+                    case 1: // metallic
+                    case 3: // transmission
+                    case 6: // alpha cutoff
+                        clamped = std::clamp(val, 0.0f, 1.0f);
+                        break;
+                    case 2: // ior
+                        clamped = std::max(1.0f, val);
+                        break;
+                    case 4: // rim intensity
+                        clamped = std::clamp(val, 0.0f, 8.0f);
+                        break;
+                    case 5: // rim exponent
+                        clamped = std::clamp(val, 0.5f, 8.0f);
+                        break;
                 }
 
                 if (clamped != val) {
@@ -173,16 +219,10 @@ namespace slate {
 
                 m_materialFloatValues[i] = clamped;
 
-                int gpuIndex = i;
-                switch (i) {
-                    case 0: gpuIndex = 1; break;
-                    case 1: gpuIndex = 2; break;
-                    case 2: gpuIndex = 4; break;
-                    case 3: gpuIndex = 3; break;
-                }
+                static const int kGpuIndex[kNumMaterialFloats] = { 1, 2, 4, 3, 5, 6, 7 };
 
                 if (m_onMaterialFloatChanged) {
-                    m_onMaterialFloatChanged(gpuIndex, clamped);
+                    m_onMaterialFloatChanged(kGpuIndex[i], clamped);
                 }
             });
             materialDropdown->addContentElement(inputBox);
@@ -429,12 +469,23 @@ namespace slate {
 
         glm::vec2 matAbsPos = materialDropdown->getAbsolutePosition();
         if (materialDropdown->isExpanded()) {
-            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? 195.0f + 75.0f : 0.0f;
-            m_fontLoader->generateTextGeometry("Color", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 19.0f), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Roughness", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 69.0f + matOffset), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Metallic", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 119.0f + matOffset), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("IOR", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 169.0f + matOffset), dimTextColor, vertices, indices);
-            m_fontLoader->generateTextGeometry("Transmission", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + 219.0f + matOffset), dimTextColor, vertices, indices);
+            float albedoExtra = (m_colorPicker && m_colorPicker->isOpen()) ? kColorPickerExtraH : 0.0f;
+            float emissiveExtra = (m_emissiveColorPicker && m_emissiveColorPicker->isOpen()) ? kColorPickerExtraH : 0.0f;
+
+            m_fontLoader->generateTextGeometry("Color", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + kMaterialRowLabelBase), dimTextColor, vertices, indices);
+            m_fontLoader->generateTextGeometry("Emissive", glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + kMaterialRowLabelBase + kMaterialRowSpacing + albedoExtra), dimTextColor, vertices, indices);
+
+            float floatLabelBase = kMaterialRowLabelBase + 2.0f * kMaterialRowSpacing + albedoExtra + emissiveExtra;
+            const char* floatLabels[kNumMaterialFloats] = {
+                "Roughness", "Metallic", "IOR", "Transmission", "Rim Intensity", "Rim Exponent", "Alpha Cutoff"
+            };
+            for (int i = 0; i < kNumMaterialFloats; ++i) {
+                m_fontLoader->generateTextGeometry(
+                    floatLabels[i],
+                    glm::vec2(matAbsPos.x + 12.0f, matAbsPos.y + 28.0f + floatLabelBase + i * kMaterialRowSpacing),
+                    dimTextColor, vertices, indices
+                );
+            }
         }
 
         glm::vec2 physAbsPos = physicsDropdown->getAbsolutePosition();
@@ -463,20 +514,22 @@ namespace slate {
             float materialPosY = transformDropdown->getPosition().y + transformHeight + 8.0f;
             materialDropdown->setPosition(glm::vec2(8.0f, materialPosY));
 
-            float baseMaterialContentHeight = 290.0f;
-            float colorPickerExtraH = 270.0f;
-            if (m_colorPicker && m_colorPicker->isOpen()) {
-                baseMaterialContentHeight += colorPickerExtraH;
-            }
+            float albedoExtra = (m_colorPicker && m_colorPicker->isOpen()) ? kColorPickerExtraH : 0.0f;
+            float emissiveExtra = (m_emissiveColorPicker && m_emissiveColorPicker->isOpen()) ? kColorPickerExtraH : 0.0f;
+
+            float baseMaterialContentHeight = kMaterialBaseContentHeight + albedoExtra + emissiveExtra;
             materialDropdown->setSize(glm::vec2(panelWidth - 16.0f, baseMaterialContentHeight));
 
-            float matOffset = (m_colorPicker && m_colorPicker->isOpen()) ? colorPickerExtraH : 0.0f;
-            float baseFloatRowY[4] = { 75.0f, 125.0f, 175.0f, 225.0f };
+            if (m_emissiveColorPicker) {
+                glm::vec2 pos = m_emissiveColorPicker->getPosition();
+                m_emissiveColorPicker->setPosition(glm::vec2(pos.x, 75.0f + albedoExtra));
+            }
 
-            for (int i = 0; i < 4; ++i) {
+            float floatBaseY = 125.0f + albedoExtra + emissiveExtra;
+            for (int i = 0; i < kNumMaterialFloats; ++i) {
                 if (m_matFloatInputBoxes[i]) {
                     glm::vec2 currentPos = m_matFloatInputBoxes[i]->getPosition();
-                    m_matFloatInputBoxes[i]->setPosition(glm::vec2(currentPos.x, baseFloatRowY[i] + matOffset));
+                    m_matFloatInputBoxes[i]->setPosition(glm::vec2(currentPos.x, floatBaseY + i * kMaterialRowSpacing));
                 }
             }
 
@@ -518,6 +571,13 @@ namespace slate {
         }
     }
 
+    void UIInspectorPanel::setEmissiveColorValues(const glm::vec4& color) {
+        m_emissiveColorValues = color;
+        if (m_emissiveColorPicker) {
+            m_emissiveColorPicker->setColorValue(color);
+        }
+    }
+
     void UIInspectorPanel::setRoughness(float val) {
         m_materialFloatValues[0] = val;
         if (m_matFloatInputBoxes[0]) {
@@ -543,6 +603,27 @@ namespace slate {
         m_materialFloatValues[3] = val;
         if (m_matFloatInputBoxes[3]) {
             m_matFloatInputBoxes[3]->setValueWithoutCallback(val);
+        }
+    }
+
+    void UIInspectorPanel::setRimIntensity(float val) {
+        m_materialFloatValues[4] = val;
+        if (m_matFloatInputBoxes[4]) {
+            m_matFloatInputBoxes[4]->setValueWithoutCallback(val);
+        }
+    }
+
+    void UIInspectorPanel::setRimExponent(float val) {
+        m_materialFloatValues[5] = val;
+        if (m_matFloatInputBoxes[5]) {
+            m_matFloatInputBoxes[5]->setValueWithoutCallback(val);
+        }
+    }
+
+    void UIInspectorPanel::setAlphaCutoff(float val) {
+        m_materialFloatValues[6] = val;
+        if (m_matFloatInputBoxes[6]) {
+            m_matFloatInputBoxes[6]->setValueWithoutCallback(val);
         }
     }
 

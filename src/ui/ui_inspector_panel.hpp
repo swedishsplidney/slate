@@ -62,6 +62,11 @@ namespace slate {
         void setOnPhysicsFrictionChanged(std::function<void(float)> cb) { m_onPhysicsFrictionChanged = cb; }
         void setOnPhysicsGravityFactorChanged(std::function<void(float)> cb) { m_onPhysicsGravityFactorChanged = cb; }
 
+        void setEmissiveColorValues(const glm::vec4& color);
+        void setRimIntensity(float val);
+        void setRimExponent(float val);
+        void setAlphaCutoff(float val);
+
     private:
         void updateChildLayouts();
 
@@ -71,14 +76,14 @@ namespace slate {
         glm::vec3 m_rotationValues{0.0f};
         glm::vec3 m_scaleValues{1.0f};
         glm::vec4 m_materialColorValues{1.0f};
-        float m_materialFloatValues[4]{0.5f, 0.0f, 1.5f, 0.0f};
+        float m_materialFloatValues[7];
 
         std::shared_ptr<UIInputBox> m_posInputBoxes[3];
         std::shared_ptr<UIInputBox> m_rotInputBoxes[3];
         std::shared_ptr<UIInputBox> m_sclInputBoxes[3];
 
         std::shared_ptr<UIColorPicker> m_colorPicker;
-        std::shared_ptr<UIInputBox> m_matFloatInputBoxes[4];
+        std::shared_ptr<UIInputBox> m_matFloatInputBoxes[7];
 
         std::function<void(float, float, float)> m_onPositionChanged;
         std::function<void(float, float, float)> m_onRotationChanged;
@@ -101,5 +106,8 @@ namespace slate {
         std::function<void(float)> m_onPhysicsBouncinessChanged;
         std::function<void(float)> m_onPhysicsFrictionChanged;
         std::function<void(float)> m_onPhysicsGravityFactorChanged;
+
+        std::shared_ptr<UIColorPicker> m_emissiveColorPicker;
+        glm::vec4 m_emissiveColorValues{0.0f, 0.0f, 0.0f, 1.0f};
     };
 }
