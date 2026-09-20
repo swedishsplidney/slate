@@ -18,8 +18,10 @@ namespace slate {
         int hasNormalTexture = 0;
         int hasOrmTexture = 0;
         int hasEmissiveTexture = 0;
+
+        glm::vec4 detailParams{8.0f, 0.0f, 0.0f, 0.0f};
     };
-    static_assert(sizeof(MaterialGPU) == 80, "MaterialGPU must match pbr.frag std430 layout");
+    static_assert(sizeof(MaterialGPU) == 96, "MaterialGPU must match pbr.frag std430 layout");
 
     struct Material {
         std::string name;

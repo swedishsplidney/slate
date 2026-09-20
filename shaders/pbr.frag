@@ -26,6 +26,8 @@ struct MaterialGPU {
     int hasNormalTexture;
     int hasOrmTexture;
     int hasEmissiveTexture;
+
+    vec4 detailParams;
 };
 
 layout(push_constant) uniform PushConstants {
@@ -45,6 +47,7 @@ layout(std140, set = 0, binding = 0) uniform GlobalUBO {
 } ubo;
 
 layout(set = 0, binding = 1) uniform sampler2D sceneColorTexture;
+layout(set = 0, binding = 2) uniform sampler2D detailNormalMap;
 layout(set = 1, binding = 1) uniform sampler2D albedoMap;
 layout(set = 1, binding = 2) uniform sampler2D normalMap;
 layout(set = 1, binding = 3) uniform sampler2D ormMap;
@@ -99,7 +102,6 @@ vec3 computeDisneyDiffuse(vec3 albedo, float roughness, float NdotV, float NdotL
     return albedo * (lightScatter * viewScatter * energyFactor / PI);
 }
 
-// ambient cube
 vec3 sampleAmbientCube(vec3 n) {
     vec3 n2 = n * n;
     vec3 xColor = mix(ubo.ambientCube[1].rgb, ubo.ambientCube[0].rgb, step(0.0, n.x));
@@ -108,7 +110,7 @@ vec3 sampleAmbientCube(vec3 n) {
     return n2.x * xColor + n2.y * yColor + n2.z * zColor;
 }
 
-// normal
+// cotangent-frame normal mapping
 mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
     vec3 dp1 = dFdx(p);
     vec3 dp2 = dFdy(p);
@@ -124,6 +126,17 @@ mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
     return mat3(T * invmax, B * invmax, N);
 }
 
+vec3 blendNormals(vec3 base, vec3 detail) {
+    base += vec3(0.0, 0.0, 1.0);
+    detail *= vec3(-1.0, -1.0, 1.0);
+    return base * dot(base, detail) / base.z - detail;
+}
+
+// interleaved gradient noise
+float interleavedGradientNoise(vec2 fragCoord) {
+    return fract(52.9829189 * fract(dot(fragCoord, vec2(0.06711056, 0.00583715))));
+}
+
 vec3 toneMapPBRNeutral(vec3 color) {
     const float startCompression = 0.8 - 0.04;
     const float desaturation = 0.15;
@@ -137,6 +150,18 @@ vec3 toneMapPBRNeutral(vec3 color) {
     color *= newPeak / peak;
     float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
     return mix(color, vec3(newPeak), g);
+}
+
+// refract
+vec3 sampleRefraction(vec3 V, vec3 N, float iorVal, vec2 screenUV, float transmissionAmt) {
+    vec3 refractDir = refract(-V, N, 1.0 / iorVal);
+    if (length(refractDir) < 0.001) refractDir = reflect(-V, N);
+
+    vec3 rayDeviation = refractDir - (-V);
+    vec2 distortion = (push.viewProjMatrix * vec4(rayDeviation, 0.0)).xy * 0.05 * transmissionAmt;
+    vec2 refractUV = clamp(screenUV + distortion, vec2(0.001), vec2(0.999));
+
+    return texture(sceneColorTexture, refractUV).rgb;
 }
 
 void main() {
@@ -178,6 +203,13 @@ void main() {
     vec3 N = N_base;
     if (mat.hasNormalTexture > 0) {
         vec3 tangentNormal = texture(normalMap, fragTexCoord).rgb * 2.0 - 1.0;
+
+        if (mat.detailParams.y > 0.0) {
+            vec3 detailNormal = texture(detailNormalMap, fragTexCoord * mat.detailParams.x).rgb * 2.0 - 1.0;
+            detailNormal = normalize(mix(vec3(0.0, 0.0, 1.0), detailNormal, mat.detailParams.y));
+            tangentNormal = blendNormals(tangentNormal, detailNormal);
+        }
+
         mat3 TBN = cotangentFrame(N_base, fragPosWorld, fragTexCoord);
         N = normalize(TBN * tangentNormal);
     }
@@ -248,15 +280,17 @@ void main() {
         ivec2 texSize = textureSize(sceneColorTexture, 0);
         if (texSize.x > 0 && texSize.y > 0) {
             vec2 screenUV = gl_FragCoord.xy / vec2(texSize);
-            vec3 refractDir = refract(-V, N, 1.0 / ior);
-            if (length(refractDir) < 0.001) refractDir = reflect(-V, N);
-
-            vec3 rayDeviation = refractDir - (-V);
-            vec2 distortion = (push.viewProjMatrix * vec4(rayDeviation, 0.0)).xy * 0.05 * transmission;
-            vec2 refractUV = clamp(screenUV + distortion, vec2(0.001), vec2(0.999));
-
-            vec3 backgroundScene = texture(sceneColorTexture, refractUV).rgb;
             vec3 glassSpecular = (specularDirect * lightColor * NdotL) + ambientSpecular;
+
+            float dispersion = mat.detailParams.z;
+            vec3 backgroundScene;
+            if (dispersion > 0.001) {
+                backgroundScene.r = sampleRefraction(V, N, ior - dispersion, screenUV, transmission).r;
+                backgroundScene.g = sampleRefraction(V, N, ior,              screenUV, transmission).g;
+                backgroundScene.b = sampleRefraction(V, N, ior + dispersion, screenUV, transmission).b;
+            } else {
+                backgroundScene = sampleRefraction(V, N, ior, screenUV, transmission);
+            }
 
             vec3 transmittedLight = backgroundScene * albedo * (vec3(1.0) - F_env);
             color = mix(color, transmittedLight + glassSpecular + emissive, transmission);
@@ -266,6 +300,11 @@ void main() {
     color *= ubo.exposure > 0.0 ? ubo.exposure : 1.0;
     color = toneMapPBRNeutral(color);
 
+    // dithering
+    float dither = interleavedGradientNoise(gl_FragCoord.xy);
+    color += (dither - 0.5) / 255.0;
+
+    // alpha
     float glassEdgeAlpha = mix(baseAlpha * 0.2, baseAlpha, pow(1.0 - NdotV, 3.5));
     float dielectricAlpha = mix(baseAlpha, glassEdgeAlpha, transmission);
     outColor = vec4(color, mix(dielectricAlpha, 1.0, metallic));
