@@ -164,9 +164,8 @@ vec3 sampleRefraction(vec3 V, vec3 N, float iorVal, vec2 screenUV, float transmi
     return texture(sceneColorTexture, refractUV).rgb;
 }
 
-float calculateShadow(vec4 fragPosLightSpace, float NdotL) {
+float calculateShadow(vec4 fragPosLightSpace, float NdotL, vec2 fragCoord) {
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
     if (projCoords.z > 1.0 || projCoords.z < 0.0 ||
@@ -178,8 +177,32 @@ float calculateShadow(vec4 fragPosLightSpace, float NdotL) {
     float bias = max(0.0015 * (1.0 - NdotL), 0.0003);
     projCoords.z -= bias;
 
-    return texture(shadowMap, projCoords);
+    float noise = interleavedGradientNoise(fragCoord) * 6.2831853;
+    float c = cos(noise);
+    float s = sin(noise);
+    mat2 rot = mat2(c, -s, s, c);
+
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+
+    vec2 offsets[4] = vec2[](
+            vec2(-0.94,  0.33),
+            vec2( 0.33,  0.94),
+            vec2(-0.33, -0.94),
+            vec2( 0.94, -0.33)
+    );
+
+    for (int i = 0; i < 4; ++i) {
+        vec2 rotatedOffset = rot * offsets[i] * texelSize * 2.0;
+        vec3 sampleCoords = projCoords;
+        sampleCoords.xy += rotatedOffset;
+        shadow += texture(shadowMap, sampleCoords);
+    }
+    shadow /= 4.0;
+
+    return shadow;
 }
+
 void main() {
     MaterialGPU mat = materialBuffer.materials[fragMaterialIndex];
 
@@ -259,7 +282,7 @@ void main() {
     vec3 specularDirect = (NDF * G * F) / max(4.0 * NdotV * NdotL + 0.0001, 0.0001);
     vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
     vec3 diffuseDirect = computeDisneyDiffuse(albedo, effectiveRoughness, NdotV, NdotL, LdotH);
-    float shadow = calculateShadow(fragPosLightSpace, NdotL);
+    float shadow = calculateShadow(fragPosLightSpace, NdotL, gl_FragCoord.xy);
     vec3 directLight = shadow * (kD * diffuseDirect + specularDirect) * lightColor * NdotL;
 
     // ambient
