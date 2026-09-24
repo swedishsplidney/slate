@@ -32,8 +32,9 @@ namespace slate {
         glm::vec3 lightColor;
         float lightIntensity;
         glm::vec4 ambientCube[6]{};
+        glm::mat4 lightSpaceMatrix;
     };
-    static_assert(sizeof(GlobalUBO) == 144, "GlobalUBO must match pbr.frag std140 layout");
+    static_assert(sizeof(GlobalUBO) == 208, "GlobalUBO must match pbr.frag std140 layout");
 
     struct UniformBufferObject {
         alignas(16) glm::mat4 view;
@@ -146,6 +147,11 @@ namespace slate {
         void createDescriptorSetLayout();
         void createGraphicsPipeline();
 
+        void createShadowResources();
+        void createShadowRenderPass();
+        void createShadowFramebuffer();
+        void createShadowPipeline();
+
         SDL_Window* m_window{nullptr};
         VkInstance m_instance{VK_NULL_HANDLE};
         VkPhysicalDevice m_physicalDevice{VK_NULL_HANDLE};
@@ -172,6 +178,16 @@ namespace slate {
         VkPipeline m_graphicsPipeline{VK_NULL_HANDLE};
         VkPipeline m_transparentPipeline{VK_NULL_HANDLE};
 
+        glm::mat4 m_lightViewProj{1.0f};
+        VkRenderPass m_shadowRenderPass{VK_NULL_HANDLE};
+        VkFramebuffer m_shadowFramebuffer{VK_NULL_HANDLE};
+        VkImage m_shadowMapImage{VK_NULL_HANDLE};
+        VkDeviceMemory m_shadowMapImageMemory{VK_NULL_HANDLE};
+        VkImageView m_shadowMapImageView{VK_NULL_HANDLE};
+        VkSampler m_shadowMapSampler{VK_NULL_HANDLE};
+        VkPipeline m_shadowPipeline{VK_NULL_HANDLE};
+        VkPipelineLayout m_shadowPipelineLayout{VK_NULL_HANDLE};
+
         std::vector<char> readFile(const std::string& filename);
         VkShaderModule createShaderModule(const std::vector<char>& code);
 
@@ -179,7 +195,6 @@ namespace slate {
 
         VkPipelineLayout m_uiPipelineLayout{VK_NULL_HANDLE};
         VkPipeline m_uiGraphicsPipeline{VK_NULL_HANDLE};
-
 
         VkBuffer m_uiVertexBuffer{VK_NULL_HANDLE};
         VkDeviceMemory m_uiVertexBufferMemory{VK_NULL_HANDLE};
@@ -293,7 +308,6 @@ namespace slate {
         VkDeviceMemory m_textureImageMemory = VK_NULL_HANDLE;
         VkImageView m_textureImageView = VK_NULL_HANDLE;
         VkSampler m_textureSampler = VK_NULL_HANDLE;
-
 
         VkImage m_defaultNormalImage = VK_NULL_HANDLE;
         VkDeviceMemory m_defaultNormalImageMemory = VK_NULL_HANDLE;

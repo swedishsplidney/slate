@@ -10,6 +10,18 @@ layout(location = 1) out vec3 fragColor;
 layout(location = 2) out vec3 fragNormal;
 layout(location = 3) out vec2 fragTexCoord;
 layout(location = 4) flat out uint fragMaterialIndex;
+layout(location = 5) out vec4 fragPosLightSpace;
+
+layout(std140, set = 0, binding = 0) uniform GlobalUBO {
+    vec3  cameraPos;
+    float exposure;
+    vec3  lightDirection;
+    float _pad0;
+    vec3  lightColor;
+    float lightIntensity;
+    vec4  ambientCube[6];
+    mat4  lightSpaceMatrix;
+} ubo;
 
 layout(push_constant) uniform PushConstants {
     mat4 modelMatrix;
@@ -21,12 +33,9 @@ void main() {
     vec4 worldPos = push.modelMatrix * vec4(inPos, 1.0);
     fragPosWorld = worldPos.xyz;
     fragColor = inColor;
-
-    mat3 normalMatrix = transpose(inverse(mat3(push.modelMatrix)));
-    fragNormal = normalize(normalMatrix * inNormal);
-
+    fragNormal = mat3(transpose(inverse(push.modelMatrix))) * inNormal;
     fragTexCoord = inTexCoord;
     fragMaterialIndex = push.materialId;
-
+    fragPosLightSpace = ubo.lightSpaceMatrix * worldPos;
     gl_Position = push.viewProjMatrix * worldPos;
 }

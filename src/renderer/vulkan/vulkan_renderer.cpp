@@ -1,5 +1,7 @@
 #include "vulkan_renderer.hpp"
 
+
+
 #include <filesystem>
 #include <stdexcept>
 #include <SDL3/SDL_vulkan.h>
@@ -21,6 +23,8 @@
 
 namespace slate {
 
+    static constexpr uint32_t SHADOW_MAP_SIZE = 2048;
+
     VulkanRenderer::VulkanRenderer(SDL_Window* window) : m_window(window) {}
 
     VulkanRenderer::~VulkanRenderer() {
@@ -37,9 +41,12 @@ namespace slate {
         createDepthResources();
         createCommandPool();
         createSceneColorResources();
+        createShadowResources();
         createRenderPass();
         createTransparentRenderPass();
+        createShadowRenderPass();
         createFramebuffers();
+        createShadowFramebuffer();
         createSyncObjects();
         createCommandBuffer();
         createDescriptorSetLayout();
@@ -50,6 +57,7 @@ namespace slate {
         createDefaultTexture();
         createDescriptorPoolAndSets();
         createGraphicsPipeline();
+        createShadowPipeline();
         createGridPipeline();
         createGizmoPipeline();
         createUIGraphicsPipeline();
@@ -605,6 +613,56 @@ namespace slate {
         }
     }
 
+    void VulkanRenderer::createShadowRenderPass() {
+        VkAttachmentDescription depthAttachment{};
+        depthAttachment.format = m_depthFormat;
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkAttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 0;
+        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 0;
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+        std::array<VkSubpassDependency, 2> dependencies{};
+
+        dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependencies[0].dstSubpass = 0;
+        dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        dependencies[1].srcSubpass = 0;
+        dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependencies[1].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        VkRenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments = &depthAttachment;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+        renderPassInfo.pDependencies = dependencies.data();
+
+        if (vkCreateRenderPass(m_device, &renderPassInfo, nullptr, &m_shadowRenderPass) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadow render pass!");
+        }
+    }
+
     void VulkanRenderer::createFramebuffers() {
         m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
 
@@ -648,6 +706,21 @@ namespace slate {
             if (vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &m_sceneColorFramebuffers[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create offscreen scene color framebuffer!");
             }
+        }
+    }
+
+    void VulkanRenderer::createShadowFramebuffer() {
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = m_shadowRenderPass;
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = &m_shadowMapImageView;
+        framebufferInfo.width = SHADOW_MAP_SIZE;
+        framebufferInfo.height = SHADOW_MAP_SIZE;
+        framebufferInfo.layers = 1;
+
+        if (vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &m_shadowFramebuffer) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadow framebuffer!");
         }
     }
 
@@ -695,8 +768,10 @@ namespace slate {
 
     void VulkanRenderer::updateUniformBuffer(uint32_t currentImage, const glm::vec3& cameraPos) {
         GlobalUBO ubo{};
+        glm::vec3 lightDir = glm::normalize(glm::vec3(1.0f, 2.0f, 1.5f));
+
         ubo.cameraPos = cameraPos;
-        ubo.lightDirection = glm::normalize(glm::vec3(1.0f, 2.0f, 1.5f));
+        ubo.lightDirection = lightDir;
         ubo.lightColor = glm::vec3(1.0f, 0.95f, 0.9f);
         ubo.lightIntensity = 3.0f;
 
@@ -704,10 +779,21 @@ namespace slate {
         ubo.ambientCube[0] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
         ubo.ambientCube[1] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
         ubo.ambientCube[2] = glm::vec4(0.55f, 0.60f, 0.65f, 0.0f);
-        ubo.ambientCube[2] = glm::vec4(0.55f, 0.60f, 0.65f, 0.0f);
         ubo.ambientCube[3] = glm::vec4(0.08f, 0.08f, 0.10f, 0.0f);
         ubo.ambientCube[4] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
         ubo.ambientCube[5] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
+
+        const float shadowExtent = 30.0f;
+        const float shadowDepthRange = shadowExtent * 6.0f;
+        glm::vec3 shadowCenter = cameraPos;
+        glm::vec3 upHint = (glm::abs(lightDir.y) > 0.99f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 lightEye = shadowCenter + lightDir * (shadowDepthRange * 0.5f);
+
+        glm::mat4 lightView = glm::lookAt(lightEye, shadowCenter, upHint);
+        glm::mat4 lightProj = glm::orthoRH_ZO(-shadowExtent, shadowExtent, -shadowExtent, shadowExtent, 0.1f, shadowDepthRange);
+
+        m_lightViewProj = lightProj * lightView;
+        ubo.lightSpaceMatrix = m_lightViewProj;
 
         memcpy(m_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
@@ -765,6 +851,80 @@ namespace slate {
         std::array<VkDescriptorSet, 1> descriptorSetsToBind = {
             m_globalDescriptorSets[m_currentFrame]
         };
+
+        // shadow pass
+
+        VkClearValue shadowClearValue{};
+        shadowClearValue.depthStencil = {1.0f, 0};
+
+        VkRenderPassBeginInfo shadowPassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        shadowPassInfo.renderPass = m_shadowRenderPass;
+        shadowPassInfo.framebuffer = m_shadowFramebuffer;
+        shadowPassInfo.renderArea.offset = {0, 0};
+        shadowPassInfo.renderArea.extent = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE};
+        shadowPassInfo.clearValueCount = 1;
+        shadowPassInfo.pClearValues = &shadowClearValue;
+
+        vkCmdBeginRenderPass(commandBuffer, &shadowPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        VkViewport shadowViewport{};
+        shadowViewport.x = 0.0f;
+        shadowViewport.y = 0.0f;
+        shadowViewport.width = static_cast<float>(SHADOW_MAP_SIZE);
+        shadowViewport.height = static_cast<float>(SHADOW_MAP_SIZE);
+        shadowViewport.minDepth = 0.0f;
+        shadowViewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0, 1, &shadowViewport);
+
+        VkRect2D shadowScissor{};
+        shadowScissor.offset = {0, 0};
+        shadowScissor.extent = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE};
+        vkCmdSetScissor(commandBuffer, 0, 1, &shadowScissor);
+
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
+
+        VkDescriptorSet globalDescSet = m_globalDescriptorSets[m_currentFrame];
+        vkCmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            m_shadowPipelineLayout,
+            0, 1, &globalDescSet,
+            0, nullptr
+        );
+
+        for (const auto& mesh : m_sceneMeshes) {
+            if (!mesh || mesh->isTransparent()) continue;
+            mesh->bind(commandBuffer);
+
+            uint32_t matId = mesh->getMaterialId();
+            if (matId >= m_globalMaterials.size() || m_globalMaterials[matId].descriptorSets.empty()) {
+                matId = 0;
+            }
+
+            if (matId < m_globalMaterials.size() && !m_globalMaterials[matId].descriptorSets.empty()) {
+                VkDescriptorSet matDescSet = m_globalMaterials[matId].descriptorSets[m_currentFrame];
+
+                vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    m_shadowPipelineLayout,
+                    1,
+                    1, &matDescSet,
+                    0, nullptr
+                );
+            }
+
+            struct ShadowPushConstants {
+                glm::mat4 modelMatrix;
+                glm::mat4 viewProjMatrix;
+                uint32_t materialId = 0;
+            } shadowPushData{mesh->getModelMatrix(), m_lightViewProj, mesh->getMaterialId()};
+
+            vkCmdPushConstants(commandBuffer, m_shadowPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ShadowPushConstants), &shadowPushData);
+            mesh->draw(commandBuffer);
+        }
+
+        vkCmdEndRenderPass(commandBuffer);
 
         // opaque
 
@@ -1423,8 +1583,17 @@ namespace slate {
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             imageInfo.imageView = m_textureImageView;
             imageInfo.sampler = m_textureSampler;
+            VkDescriptorImageInfo detailImageInfo{};
+            detailImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            detailImageInfo.imageView = m_defaultNormalImageView;
+            detailImageInfo.sampler = m_textureSampler;
 
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+            VkDescriptorImageInfo shadowImageInfo{};
+            shadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            shadowImageInfo.imageView = m_shadowMapImageView;
+            shadowImageInfo.sampler = m_shadowMapSampler;
+
+            std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = m_globalDescriptorSets[i];
@@ -1441,6 +1610,22 @@ namespace slate {
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrites[1].descriptorCount = 1;
             descriptorWrites[1].pImageInfo = &imageInfo;
+
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = m_globalDescriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;
+            descriptorWrites[2].dstArrayElement = 0;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pImageInfo = &detailImageInfo;
+
+            descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[3].dstSet = m_globalDescriptorSets[i];
+            descriptorWrites[3].dstBinding = 3;
+            descriptorWrites[3].dstArrayElement = 0;
+            descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[3].descriptorCount = 1;
+            descriptorWrites[3].pImageInfo = &shadowImageInfo;
 
             vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
@@ -1491,7 +1676,21 @@ namespace slate {
         sceneColorBinding.descriptorCount = 1;
         sceneColorBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        std::array<VkDescriptorSetLayoutBinding, 2> globalBindings = { uboLayoutBinding, sceneColorBinding };
+        VkDescriptorSetLayoutBinding detailNormalBinding{};
+        detailNormalBinding.binding = 2;
+        detailNormalBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        detailNormalBinding.descriptorCount = 1;
+        detailNormalBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutBinding shadowMapBinding{};
+        shadowMapBinding.binding = 3;
+        shadowMapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        shadowMapBinding.descriptorCount = 1;
+        shadowMapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 4> globalBindings = {
+            uboLayoutBinding, sceneColorBinding, detailNormalBinding, shadowMapBinding
+        };
 
         VkDescriptorSetLayoutCreateInfo globalLayoutInfo{};
         globalLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1635,7 +1834,7 @@ namespace slate {
     }
 
     void VulkanRenderer::createMaterialBuffers() {
-        VkDeviceSize bufferSize = sizeof(Material) * MAX_MATERIALS;
+        VkDeviceSize bufferSize = sizeof(MaterialGPU) * MAX_MATERIALS;
 
         m_materialBuffers.resize(MAX_FRAMES_IN_FLIGHT);
         m_materialBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1856,6 +2055,133 @@ namespace slate {
         vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
 
         std::cout << "vulkan graphics pipeline successfully compiled!" << std::endl;
+    }
+
+    void VulkanRenderer::createShadowPipeline() {
+        auto vertShaderCode = readFile("shaders/compiled/shadow.vert.spv");
+        auto fragShaderCode = readFile("shaders/compiled/shadow.frag.spv");
+
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+        auto bindingDescription = Vertex::getBindingDescription();
+        auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_NONE;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.attachmentCount = 0;
+        colorBlending.pAttachments = nullptr;
+
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+        };
+        VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+        dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicStateInfo.pDynamicStates = dynamicStates.data();
+
+        struct ShadowPushConstantData {
+            glm::mat4 modelMatrix;
+            glm::mat4 viewProjMatrix;
+            uint32_t materialIndex;
+        };
+
+        VkPushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(ShadowPushConstantData);
+
+        std::array<VkDescriptorSetLayout, 2> shadowSetLayouts = { m_globalDescriptorSetLayout, m_materialDescriptorSetLayout };
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(shadowSetLayouts.size());
+        pipelineLayoutInfo.pSetLayouts = shadowSetLayouts.data();
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+        if (vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &m_shadowPipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadow pipeline layout!");
+        }
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicStateInfo;
+        pipelineInfo.layout = m_shadowPipelineLayout;
+        pipelineInfo.renderPass = m_shadowRenderPass;
+        pipelineInfo.subpass = 0;
+
+        if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_shadowPipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadow graphics pipeline!");
+        }
+
+        vkDestroyShaderModule(m_device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
+
+        std::cout << "vulkan shadow pipeline successfully compiled!" << std::endl;
     }
 
     void VulkanRenderer::createGridPipeline() {
@@ -2124,6 +2450,37 @@ namespace slate {
 
         if (vkCreateSampler(m_device, &samplerInfo, nullptr, &m_sceneColorSampler) != VK_SUCCESS) {
             throw std::runtime_error("failed to create scene color sampler!");
+        }
+    }
+
+    void VulkanRenderer::createShadowResources() {
+        createImage(
+            SHADOW_MAP_SIZE, SHADOW_MAP_SIZE,
+            m_depthFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            m_shadowMapImage,
+            m_shadowMapImageMemory
+        );
+
+        m_shadowMapImageView = createImageView(m_shadowMapImage, m_depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        samplerInfo.compareEnable = VK_TRUE;
+        samplerInfo.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+        if (vkCreateSampler(m_device, &samplerInfo, nullptr, &m_shadowMapSampler) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadow map sampler!");
         }
     }
 
@@ -3001,6 +3358,39 @@ namespace slate {
             m_gizmoPipeline = VK_NULL_HANDLE;
         }
         m_gizmoMesh.reset();
+
+        if (m_shadowPipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(m_device, m_shadowPipeline, nullptr);
+            m_shadowPipeline = VK_NULL_HANDLE;
+        }
+        if (m_shadowPipelineLayout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(m_device, m_shadowPipelineLayout, nullptr);
+            m_shadowPipelineLayout = VK_NULL_HANDLE;
+        }
+        if (m_shadowFramebuffer != VK_NULL_HANDLE) {
+            vkDestroyFramebuffer(m_device, m_shadowFramebuffer, nullptr);
+            m_shadowFramebuffer = VK_NULL_HANDLE;
+        }
+        if (m_shadowRenderPass != VK_NULL_HANDLE) {
+            vkDestroyRenderPass(m_device, m_shadowRenderPass, nullptr);
+            m_shadowRenderPass = VK_NULL_HANDLE;
+        }
+        if (m_shadowMapSampler != VK_NULL_HANDLE) {
+            vkDestroySampler(m_device, m_shadowMapSampler, nullptr);
+            m_shadowMapSampler = VK_NULL_HANDLE;
+        }
+        if (m_shadowMapImageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(m_device, m_shadowMapImageView, nullptr);
+            m_shadowMapImageView = VK_NULL_HANDLE;
+        }
+        if (m_shadowMapImage != VK_NULL_HANDLE) {
+            vkDestroyImage(m_device, m_shadowMapImage, nullptr);
+            m_shadowMapImage = VK_NULL_HANDLE;
+        }
+        if (m_shadowMapImageMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(m_device, m_shadowMapImageMemory, nullptr);
+            m_shadowMapImageMemory = VK_NULL_HANDLE;
+        }
 
         m_sceneMeshes.clear();
         m_gridMesh.reset();

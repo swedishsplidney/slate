@@ -5,6 +5,7 @@ layout(location = 1) in vec3 fragColor;
 layout(location = 2) in vec3 fragNormal;
 layout(location = 3) in vec2 fragTexCoord;
 layout(location = 4) flat in uint fragMaterialIndex;
+layout(location = 5) in vec4 fragPosLightSpace;
 
 layout(location = 0) out vec4 outColor;
 
@@ -44,10 +45,12 @@ layout(std140, set = 0, binding = 0) uniform GlobalUBO {
     vec3  lightColor;
     float lightIntensity;
     vec4  ambientCube[6];
+    mat4  lightSpaceMatrix;
 } ubo;
 
 layout(set = 0, binding = 1) uniform sampler2D sceneColorTexture;
 layout(set = 0, binding = 2) uniform sampler2D detailNormalMap;
+layout(set = 0, binding = 3) uniform sampler2DShadow shadowMap;
 layout(set = 1, binding = 1) uniform sampler2D albedoMap;
 layout(set = 1, binding = 2) uniform sampler2D normalMap;
 layout(set = 1, binding = 3) uniform sampler2D ormMap;
@@ -110,7 +113,6 @@ vec3 sampleAmbientCube(vec3 n) {
     return n2.x * xColor + n2.y * yColor + n2.z * zColor;
 }
 
-// cotangent-frame normal mapping
 mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
     vec3 dp1 = dFdx(p);
     vec3 dp2 = dFdy(p);
@@ -132,7 +134,6 @@ vec3 blendNormals(vec3 base, vec3 detail) {
     return base * dot(base, detail) / base.z - detail;
 }
 
-// interleaved gradient noise
 float interleavedGradientNoise(vec2 fragCoord) {
     return fract(52.9829189 * fract(dot(fragCoord, vec2(0.06711056, 0.00583715))));
 }
@@ -152,7 +153,6 @@ vec3 toneMapPBRNeutral(vec3 color) {
     return mix(color, vec3(newPeak), g);
 }
 
-// refract
 vec3 sampleRefraction(vec3 V, vec3 N, float iorVal, vec2 screenUV, float transmissionAmt) {
     vec3 refractDir = refract(-V, N, 1.0 / iorVal);
     if (length(refractDir) < 0.001) refractDir = reflect(-V, N);
@@ -164,6 +164,22 @@ vec3 sampleRefraction(vec3 V, vec3 N, float iorVal, vec2 screenUV, float transmi
     return texture(sceneColorTexture, refractUV).rgb;
 }
 
+float calculateShadow(vec4 fragPosLightSpace, float NdotL) {
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+
+    if (projCoords.z > 1.0 || projCoords.z < 0.0 ||
+        projCoords.x < 0.0 || projCoords.x > 1.0 ||
+        projCoords.y < 0.0 || projCoords.y > 1.0) {
+        return 1.0;
+    }
+
+    float bias = max(0.0015 * (1.0 - NdotL), 0.0003);
+    projCoords.z -= bias;
+
+    return texture(shadowMap, projCoords);
+}
 void main() {
     MaterialGPU mat = materialBuffer.materials[fragMaterialIndex];
 
@@ -243,7 +259,8 @@ void main() {
     vec3 specularDirect = (NDF * G * F) / max(4.0 * NdotV * NdotL + 0.0001, 0.0001);
     vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
     vec3 diffuseDirect = computeDisneyDiffuse(albedo, effectiveRoughness, NdotV, NdotL, LdotH);
-    vec3 directLight = (kD * diffuseDirect + specularDirect) * lightColor * NdotL;
+    float shadow = calculateShadow(fragPosLightSpace, NdotL);
+    vec3 directLight = shadow * (kD * diffuseDirect + specularDirect) * lightColor * NdotL;
 
     // ambient
     vec3 irradiance = sampleAmbientCube(N);
@@ -300,7 +317,7 @@ void main() {
     color *= ubo.exposure > 0.0 ? ubo.exposure : 1.0;
     color = toneMapPBRNeutral(color);
 
-    // dithering
+    // dither
     float dither = interleavedGradientNoise(gl_FragCoord.xy);
     color += (dither - 0.5) / 255.0;
 
