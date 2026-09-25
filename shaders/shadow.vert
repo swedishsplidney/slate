@@ -9,10 +9,18 @@ layout(location = 1) flat out uint fragMaterialIndex;
 layout(std140, set = 0, binding = 0) uniform GlobalUBO {
     vec3  cameraPos;
     float exposure;
+
     vec3  lightDirection;
-    float _pad0;
+    int   lightType;
+
     vec3  lightColor;
     float lightIntensity;
+
+    vec3  lightPos;
+    float lightRange;
+
+    vec4  lightParams;
+
     vec4  ambientCube[6];
     mat4  lightSpaceMatrix;
 } ubo;

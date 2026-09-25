@@ -4,6 +4,7 @@
 
 #include "renderer/renderer.hpp"
 #include "renderer/mesh.hpp"
+#include "renderer/light.hpp"
 #include "ui/ui_vertex.hpp"
 #include "ui/ui_element.hpp"
 #include "resources/mesh_loader.hpp"
@@ -27,14 +28,22 @@ namespace slate {
     struct alignas(16) GlobalUBO {
         glm::vec3 cameraPos;
         float exposure = 1.0f;
-        glm::vec3 lightDirection;
-        float _pad0 = 0.0f;
-        glm::vec3 lightColor;
-        float lightIntensity;
+
+        glm::vec3 lightDirection{0.0f, 1.0f, 0.0f};
+        int32_t lightType = 0;
+
+        glm::vec3 lightColor{1.0f, 0.95f, 0.9f};
+        float lightIntensity = 3.0f;
+
+        glm::vec3 lightPos{0.0f};
+        float lightRange = 25.0f;
+
+        glm::vec4 lightParams{1.0f, 0.02f, 0.0f, 0.0f};
+
         glm::vec4 ambientCube[6]{};
         glm::mat4 lightSpaceMatrix;
     };
-    static_assert(sizeof(GlobalUBO) == 208, "GlobalUBO must match pbr.frag std140 layout");
+    static_assert(sizeof(GlobalUBO) == 240, "GlobalUBO must match pbr.frag std140 layout");
 
     struct UniformBufferObject {
         alignas(16) glm::mat4 view;
@@ -122,6 +131,11 @@ namespace slate {
             m_viewportOffset = offset;
             m_viewportSize = size;
         }
+
+
+        void setLight(const SceneLight& light) { m_sceneLight = light; }
+        SceneLight& getLight() { return m_sceneLight; }
+        const SceneLight& getLight() const { return m_sceneLight; }
 
         bool loadTexture(const std::string& filepath, VkImage& outImage, VkDeviceMemory& outMemory, VkImageView& outImageView, VkSampler& outSampler);
         bool importAndApplyTexture(const std::string& filepath, uint32_t materialIndex);
@@ -303,6 +317,8 @@ namespace slate {
 
         glm::vec2 m_viewportOffset{0.0f};
         glm::vec2 m_viewportSize{0.0f};
+
+        SceneLight m_sceneLight;
 
         VkImage m_textureImage = VK_NULL_HANDLE;
         VkDeviceMemory m_textureImageMemory = VK_NULL_HANDLE;

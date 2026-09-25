@@ -104,6 +104,7 @@ add_executable(slate
         src/physics/collider_generator.hpp
         src/resources/texture_loader.cpp
         src/resources/texture_loader.hpp
+        src/renderer/light.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})

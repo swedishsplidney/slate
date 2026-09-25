@@ -12,6 +12,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cstring>
+#include <algorithm>
+#include <cmath>
 
 #include "renderer/vertex.hpp"
 #include "ui/ui_vertex.hpp"
@@ -23,7 +25,7 @@
 
 namespace slate {
 
-    static constexpr uint32_t SHADOW_MAP_SIZE = 2048;
+    static constexpr uint32_t SHADOW_MAP_SIZE = 4096;
 
     VulkanRenderer::VulkanRenderer(SDL_Window* window) : m_window(window) {}
 
@@ -768,14 +770,10 @@ namespace slate {
 
     void VulkanRenderer::updateUniformBuffer(uint32_t currentImage, const glm::vec3& cameraPos) {
         GlobalUBO ubo{};
-        glm::vec3 lightDir = glm::normalize(glm::vec3(1.0f, 2.0f, 1.5f));
 
         ubo.cameraPos = cameraPos;
-        ubo.lightDirection = lightDir;
-        ubo.lightColor = glm::vec3(1.0f, 0.95f, 0.9f);
-        ubo.lightIntensity = 3.0f;
-
         ubo.exposure = 1.0f;
+
         ubo.ambientCube[0] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
         ubo.ambientCube[1] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
         ubo.ambientCube[2] = glm::vec4(0.55f, 0.60f, 0.65f, 0.0f);
@@ -783,17 +781,58 @@ namespace slate {
         ubo.ambientCube[4] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
         ubo.ambientCube[5] = glm::vec4(0.45f, 0.50f, 0.55f, 0.0f);
 
-        const float shadowExtent = 30.0f;
-        const float shadowDepthRange = shadowExtent * 6.0f;
-        glm::vec3 shadowCenter = cameraPos;
-        glm::vec3 upHint = (glm::abs(lightDir.y) > 0.99f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
-        glm::vec3 lightEye = shadowCenter + lightDir * (shadowDepthRange * 0.5f);
+        const SceneLight& light = m_sceneLight;
+        ubo.lightType = static_cast<int32_t>(light.type);
+        ubo.lightColor = light.color;
+        ubo.lightIntensity = light.intensity;
 
-        glm::mat4 lightView = glm::lookAt(lightEye, shadowCenter, upHint);
-        glm::mat4 lightProj = glm::orthoRH_ZO(-shadowExtent, shadowExtent, -shadowExtent, shadowExtent, 0.1f, shadowDepthRange);
+        glm::mat4 lightView(1.0f);
+        glm::mat4 lightProj(1.0f);
+        float shadowNormalBias;
+
+        if (light.type == LightType::Sun) {
+            // sun
+            glm::vec3 sunDir = glm::length(light.sunDirection) > 0.0001f ? glm::normalize(light.sunDirection) : glm::vec3(0.0f, 1.0f, 0.0f);
+
+            const float shadowExtent = std::max(light.sunOrthoHalfExtent, 0.1f);
+            const float shadowDepthRange = shadowExtent * std::max(light.sunShadowDepthMultiplier, 1.0f);
+            glm::vec3 shadowCenter = cameraPos;
+            glm::vec3 upHint = (std::abs(sunDir.y) > 0.99f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+            glm::vec3 lightEye = shadowCenter + sunDir * (shadowDepthRange * 0.5f);
+
+            lightView = glm::lookAt(lightEye, shadowCenter, upHint);
+            lightProj = glm::orthoRH_ZO(-shadowExtent, shadowExtent, -shadowExtent, shadowExtent, 0.1f, shadowDepthRange);
+
+            ubo.lightDirection = sunDir;
+            ubo.lightPos = lightEye;
+            ubo.lightRange = shadowDepthRange;
+
+            float texelWorldSize = (2.0f * shadowExtent) / static_cast<float>(SHADOW_MAP_SIZE);
+            shadowNormalBias = texelWorldSize * 1.5f;
+        } else {
+            // point / area
+            glm::vec3 aimDir = glm::length(light.aimDirection) > 0.0001f ? glm::normalize(light.aimDirection) : glm::vec3(0.0f, -1.0f, 0.0f);
+            glm::vec3 upHint = (std::abs(aimDir.y) > 0.99f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+
+            const float range = std::max(light.range, 0.1f);
+            const float nearPlane = std::max(range * 0.01f, 0.05f);
+            const float farPlane = std::max(range, nearPlane + 0.1f);
+            const float fovY = glm::radians(glm::clamp(light.shadowFovDegrees, 1.0f, 170.0f));
+
+            lightView = glm::lookAt(light.position, light.position + aimDir, upHint);
+            lightProj = glm::perspectiveRH_ZO(fovY, 1.0f, nearPlane, farPlane);
+
+            ubo.lightDirection = aimDir;
+            ubo.lightPos = light.position;
+            ubo.lightRange = range;
+
+            float texelWorldSize = (2.0f * farPlane * std::tan(fovY * 0.5f)) / static_cast<float>(SHADOW_MAP_SIZE);
+            shadowNormalBias = texelWorldSize * 1.5f;
+        }
 
         m_lightViewProj = lightProj * lightView;
         ubo.lightSpaceMatrix = m_lightViewProj;
+        ubo.lightParams = glm::vec4(std::max(light.shadowSoftness, 0.1f), shadowNormalBias, 0.0f, 0.0f);
 
         memcpy(m_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }

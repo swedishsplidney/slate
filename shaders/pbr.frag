@@ -40,10 +40,18 @@ layout(push_constant) uniform PushConstants {
 layout(std140, set = 0, binding = 0) uniform GlobalUBO {
     vec3  cameraPos;
     float exposure;
+
     vec3  lightDirection;
-    float _pad0;
+    int   lightType; // 0 = sun, 1 = point, 2 = area
+
     vec3  lightColor;
     float lightIntensity;
+
+    vec3  lightPos;
+    float lightRange;
+
+    vec4  lightParams;
+
     vec4  ambientCube[6];
     mat4  lightSpaceMatrix;
 } ubo;
@@ -174,7 +182,7 @@ float calculateShadow(vec4 fragPosLightSpace, float NdotL, vec2 fragCoord) {
         return 1.0;
     }
 
-    float bias = max(0.0015 * (1.0 - NdotL), 0.0003);
+    float bias = max(0.0008 * (1.0 - NdotL), 0.00015);
     projCoords.z -= bias;
 
     float noise = interleavedGradientNoise(fragCoord) * 6.2831853;
@@ -182,6 +190,7 @@ float calculateShadow(vec4 fragPosLightSpace, float NdotL, vec2 fragCoord) {
     float s = sin(noise);
     mat2 rot = mat2(c, -s, s, c);
 
+    float softness = max(ubo.lightParams.x, 0.1);
     float shadow = 0.0;
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
 
@@ -193,7 +202,7 @@ float calculateShadow(vec4 fragPosLightSpace, float NdotL, vec2 fragCoord) {
     );
 
     for (int i = 0; i < 4; ++i) {
-        vec2 rotatedOffset = rot * offsets[i] * texelSize * 2.0;
+        vec2 rotatedOffset = rot * offsets[i] * texelSize * 2.0 * softness;
         vec3 sampleCoords = projCoords;
         sampleCoords.xy += rotatedOffset;
         shadow += texture(shadowMap, sampleCoords);
@@ -268,8 +277,26 @@ void main() {
     vec3 R = reflect(-V, N);
 
     // direct lighting
-    vec3 L = length(ubo.lightDirection) > 0.1 ? normalize(ubo.lightDirection) : normalize(vec3(0.5, 1.0, 0.3));
-    vec3 lightColor = length(ubo.lightColor) > 0.1 ? ubo.lightColor * ubo.lightIntensity : vec3(1.0, 0.95, 0.9) * 2.5;
+    vec3 L;
+    float attenuation = 1.0;
+
+    if (ubo.lightType == 1 || ubo.lightType == 2) {
+        // point / area
+        vec3 toLight = ubo.lightPos - fragPosWorld;
+        float dist = max(length(toLight), 0.0001);
+        L = toLight / dist;
+
+        float rangeNorm = clamp(dist / max(ubo.lightRange, 0.001), 0.0, 1.0);
+        float windowed = clamp(1.0 - rangeNorm * rangeNorm * rangeNorm * rangeNorm, 0.0, 1.0);
+        attenuation = (windowed * windowed) / (dist * dist);
+    } else {
+        // sun
+        L = length(ubo.lightDirection) > 0.1 ? normalize(ubo.lightDirection) : normalize(vec3(0.5, 1.0, 0.3));
+    }
+
+    vec3 lightColorRaw = length(ubo.lightColor) > 0.1 ? ubo.lightColor : vec3(1.0, 0.95, 0.9);
+    float lightIntensityRaw = ubo.lightIntensity > 0.0 ? ubo.lightIntensity : 2.5;
+    vec3 lightColor = lightColorRaw * lightIntensityRaw * attenuation;
 
     vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
