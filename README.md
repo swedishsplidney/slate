@@ -33,6 +33,7 @@
 * jolt physics
 * scene serialization
 * shadow mapping
+* sun, point, area lighting system
 
 ---
 
