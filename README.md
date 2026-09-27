@@ -29,6 +29,10 @@
 * fully customizeable .json material system (with support for importing .mtl files)
 * transform and rotation gizmos
 * custom ui inspector and hierarchy panel to modify object properties
+* texture loading
+* jolt physics
+* scene serialization
+* shadow mapping
 
 ---
 
