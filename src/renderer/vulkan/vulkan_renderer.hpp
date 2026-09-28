@@ -132,10 +132,12 @@ namespace slate {
             m_viewportSize = size;
         }
 
-
         void setLight(const SceneLight& light) { m_sceneLight = light; }
         SceneLight& getLight() { return m_sceneLight; }
         const SceneLight& getLight() const { return m_sceneLight; }
+
+        std::vector<DynamicPointLight> m_dynamicLights;
+        std::vector<DynamicPointLight>& getDynamicLights() { return m_dynamicLights; }
 
         bool loadTexture(const std::string& filepath, VkImage& outImage, VkDeviceMemory& outMemory, VkImageView& outImageView, VkSampler& outSampler);
         bool importAndApplyTexture(const std::string& filepath, uint32_t materialIndex);
@@ -244,7 +246,7 @@ namespace slate {
 
         void createUniformBuffers();
         void createDescriptorPoolAndSets();
-        void updateUniformBuffer(uint32_t currentImage, const glm::vec3& cameraPos);
+        void updateUniformBuffer(const glm::vec3& cameraPos);
 
         std::vector<VkBuffer> m_uniformBuffers;
         std::vector<VkDeviceMemory> m_uniformBuffersMemory;
@@ -253,6 +255,10 @@ namespace slate {
         std::vector<VkBuffer> m_materialBuffers;
         std::vector<VkDeviceMemory> m_materialBuffersMemory;
         std::vector<void*> m_materialBuffersMapped;
+
+        std::vector<VkBuffer> m_dynamicLightBuffers;
+        std::vector<VkDeviceMemory> m_dynamicLightBuffersMemory;
+        std::vector<void*> m_dynamicLightBuffersMapped;
 
         std::vector<VkDescriptorSet> m_descriptorSets;
 
@@ -273,6 +279,8 @@ namespace slate {
         std::vector<VkDescriptorSet> m_materialDescriptorSets;
 
         void createMaterialBuffers();
+        void createDynamicLightBuffers();
+        void updateDynamicLightBuffer();
 
         uint32_t m_currentFrame = 0;
 

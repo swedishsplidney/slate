@@ -42,7 +42,7 @@ layout(std140, set = 0, binding = 0) uniform GlobalUBO {
     float exposure;
 
     vec3  lightDirection;
-    int   lightType; // 0 = sun, 1 = point, 2 = area
+    int   lightType;      // 0 = aun 1 = point, 2 = area
 
     vec3  lightColor;
     float lightIntensity;
@@ -67,6 +67,20 @@ layout(set = 1, binding = 4) uniform sampler2D emissiveMap;
 layout(std430, set = 1, binding = 0) readonly buffer MaterialBuffer {
     MaterialGPU materials[];
 } materialBuffer;
+
+const int MAX_DYNAMIC_LIGHTS = 16;
+
+struct DynamicPointLightGPU {
+    vec3 position;
+    float range;
+    vec3 color;
+    float intensity;
+};
+
+layout(std430, set = 0, binding = 4) readonly buffer DynamicLightBuffer {
+    int count;
+    DynamicPointLightGPU lights[];
+} dynamicLights;
 
 const float PI = 3.14159265359;
 
@@ -172,13 +186,39 @@ vec3 sampleRefraction(vec3 V, vec3 N, float iorVal, vec2 screenUV, float transmi
     return texture(sceneColorTexture, refractUV).rgb;
 }
 
-float calculateShadow(vec4 fragPosLightSpace, float NdotL, vec2 fragCoord) {
+vec3 evaluateDirectBRDF(vec3 N, vec3 V, vec3 L, float NdotV, vec3 albedo, vec3 F0, float roughness, float metallic, out vec3 specularOut) {
+    vec3 H = normalize(V + L);
+    float NdotL = max(dot(N, L), 0.0);
+    float LdotH = max(dot(L, H), 0.0);
+
+    float NDF = DistributionGGX(N, H, roughness);
+    float G   = GeometrySmith(N, V, L, roughness);
+    vec3  F   = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    vec3 specular = (NDF * G * F) / max(4.0 * NdotV * NdotL + 0.0001, 0.0001);
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+    vec3 diffuse = computeDisneyDiffuse(albedo, roughness, NdotV, NdotL, LdotH);
+
+    specularOut = specular;
+    return (kD * diffuse + specular) * NdotL;
+}
+
+vec2 windowedAttenuation(float dist, float range) {
+    float rangeNorm = clamp(dist / max(range, 0.001), 0.0, 1.0);
+    float windowed = clamp(1.0 - rangeNorm * rangeNorm * rangeNorm * rangeNorm, 0.0, 1.0);
+    float attenuation = (windowed * windowed) / max(dist * dist, 0.0001);
+    return vec2(attenuation, windowed);
+}
+
+float calculateShadow(vec4 fragPosLightSpace, float NdotL, vec2 fragCoord, float rangeFade) {
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
-    if (projCoords.z > 1.0 || projCoords.z < 0.0 ||
-        projCoords.x < 0.0 || projCoords.x > 1.0 ||
-        projCoords.y < 0.0 || projCoords.y > 1.0) {
+    vec2 centerDist = abs(projCoords.xy - 0.5) * 2.0;
+    float angularFade = 1.0 - smoothstep(0.75, 1.0, max(centerDist.x, centerDist.y));
+    float edgeFade = angularFade * clamp(rangeFade, 0.0, 1.0);
+
+    if (edgeFade <= 0.001 || projCoords.z < 0.0 || projCoords.z > 1.0) {
         return 1.0;
     }
 
@@ -190,7 +230,8 @@ float calculateShadow(vec4 fragPosLightSpace, float NdotL, vec2 fragCoord) {
     float s = sin(noise);
     mat2 rot = mat2(c, -s, s, c);
 
-    float softness = max(ubo.lightParams.x, 0.1);
+    // 4-tap rotated Poisson disk
+    float softness = max(ubo.lightParams.x, 0.1) * mix(2.5, 1.0, edgeFade);
     float shadow = 0.0;
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
 
@@ -209,7 +250,7 @@ float calculateShadow(vec4 fragPosLightSpace, float NdotL, vec2 fragCoord) {
     }
     shadow /= 4.0;
 
-    return shadow;
+    return mix(1.0, shadow, edgeFade);
 }
 
 void main() {
@@ -279,16 +320,17 @@ void main() {
     // direct lighting
     vec3 L;
     float attenuation = 1.0;
+    float shadowRangeFade = 1.0;
 
     if (ubo.lightType == 1 || ubo.lightType == 2) {
-        // point / area
+        // point/area
         vec3 toLight = ubo.lightPos - fragPosWorld;
         float dist = max(length(toLight), 0.0001);
         L = toLight / dist;
 
-        float rangeNorm = clamp(dist / max(ubo.lightRange, 0.001), 0.0, 1.0);
-        float windowed = clamp(1.0 - rangeNorm * rangeNorm * rangeNorm * rangeNorm, 0.0, 1.0);
-        attenuation = (windowed * windowed) / (dist * dist);
+        vec2 atten = windowedAttenuation(dist, ubo.lightRange);
+        attenuation = atten.x;
+        shadowRangeFade = atten.y;
     } else {
         // sun
         L = length(ubo.lightDirection) > 0.1 ? normalize(ubo.lightDirection) : normalize(vec3(0.5, 1.0, 0.3));
@@ -298,19 +340,28 @@ void main() {
     float lightIntensityRaw = ubo.lightIntensity > 0.0 ? ubo.lightIntensity : 2.5;
     vec3 lightColor = lightColorRaw * lightIntensityRaw * attenuation;
 
-    vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
-    float LdotH = max(dot(L, H), 0.0);
+    vec3 mainSpecular;
+    vec3 brdfTerm = evaluateDirectBRDF(N, V, L, NdotV, albedo, F0, effectiveRoughness, metallic, mainSpecular);
+    float shadow = calculateShadow(fragPosLightSpace, NdotL, gl_FragCoord.xy, shadowRangeFade);
+    vec3 directLight = shadow * brdfTerm * lightColor;
 
-    float NDF = DistributionGGX(N, H, effectiveRoughness);
-    float G   = GeometrySmith(N, V, L, effectiveRoughness);
-    vec3  F   = fresnelSchlick(max(dot(H, V), 0.0), F0);
+    // dynamic
+    vec3 dynamicLight = vec3(0.0);
+    int numDynamicLights = clamp(dynamicLights.count, 0, MAX_DYNAMIC_LIGHTS);
+    for (int i = 0; i < numDynamicLights; ++i) {
+        DynamicPointLightGPU pl = dynamicLights.lights[i];
 
-    vec3 specularDirect = (NDF * G * F) / max(4.0 * NdotV * NdotL + 0.0001, 0.0001);
-    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
-    vec3 diffuseDirect = computeDisneyDiffuse(albedo, effectiveRoughness, NdotV, NdotL, LdotH);
-    float shadow = calculateShadow(fragPosLightSpace, NdotL, gl_FragCoord.xy);
-    vec3 directLight = shadow * (kD * diffuseDirect + specularDirect) * lightColor * NdotL;
+        vec3 toLight = pl.position - fragPosWorld;
+        float dist = max(length(toLight), 0.0001);
+        vec2 atten = windowedAttenuation(dist, pl.range);
+        if (atten.x <= 0.0001) continue;
+
+        vec3 Lp = toLight / dist;
+        vec3 unusedSpecular;
+        vec3 pBrdf = evaluateDirectBRDF(N, V, Lp, NdotV, albedo, F0, effectiveRoughness, metallic, unusedSpecular);
+        dynamicLight += pBrdf * pl.color * pl.intensity * atten.x;
+    }
 
     // ambient
     vec3 irradiance = sampleAmbientCube(N);
@@ -326,7 +377,7 @@ void main() {
     vec3 ambientDiffuse = kD_amb * albedo * irradiance * ao;
     vec3 ambientSpecular = radiance * F_env * specOcclusion;
 
-    vec3 color = ambientDiffuse + ambientSpecular + directLight;
+    vec3 color = ambientDiffuse + ambientSpecular + directLight + dynamicLight;
 
     // rim light
     if (mat.rimIntensity > 0.0) {
@@ -347,7 +398,7 @@ void main() {
         ivec2 texSize = textureSize(sceneColorTexture, 0);
         if (texSize.x > 0 && texSize.y > 0) {
             vec2 screenUV = gl_FragCoord.xy / vec2(texSize);
-            vec3 glassSpecular = (specularDirect * lightColor * NdotL) + ambientSpecular;
+            vec3 glassSpecular = (mainSpecular * lightColor * NdotL) + ambientSpecular;
 
             float dispersion = mat.detailParams.z;
             vec3 backgroundScene;

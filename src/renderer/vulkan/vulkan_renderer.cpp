@@ -55,6 +55,7 @@ namespace slate {
         createUIDescriptorSetLayout();
         createUniformBuffers();
         createMaterialBuffers();
+        createDynamicLightBuffers();
         createFontTexture();
         createDefaultTexture();
         createDescriptorPoolAndSets();
@@ -768,7 +769,7 @@ namespace slate {
         }
     }
 
-    void VulkanRenderer::updateUniformBuffer(uint32_t currentImage, const glm::vec3& cameraPos) {
+    void VulkanRenderer::updateUniformBuffer(const glm::vec3& cameraPos) {
         GlobalUBO ubo{};
 
         ubo.cameraPos = cameraPos;
@@ -834,7 +835,9 @@ namespace slate {
         ubo.lightSpaceMatrix = m_lightViewProj;
         ubo.lightParams = glm::vec4(std::max(light.shadowSoftness, 0.1f), shadowNormalBias, 0.0f, 0.0f);
 
-        memcpy(m_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+        for (size_t i = 0; i < m_uniformBuffersMapped.size(); i++) {
+            memcpy(m_uniformBuffersMapped[i], &ubo, sizeof(ubo));
+        }
     }
 
     void VulkanRenderer::createBuffer(
@@ -885,7 +888,8 @@ namespace slate {
         proj[1][1] *= -1.0f;
 
         glm::vec3 cameraPos = glm::vec3(glm::inverse(viewMatrix)[3]);
-        updateUniformBuffer(imageIndex, cameraPos);
+        updateUniformBuffer(cameraPos);
+        updateDynamicLightBuffer();
 
         std::array<VkDescriptorSet, 1> descriptorSetsToBind = {
             m_globalDescriptorSets[m_currentFrame]
@@ -1632,7 +1636,12 @@ namespace slate {
             shadowImageInfo.imageView = m_shadowMapImageView;
             shadowImageInfo.sampler = m_shadowMapSampler;
 
-            std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
+            VkDescriptorBufferInfo dynamicLightBufferInfo{};
+            dynamicLightBufferInfo.buffer = m_dynamicLightBuffers[i];
+            dynamicLightBufferInfo.offset = 0;
+            dynamicLightBufferInfo.range = sizeof(DynamicLightBufferGPU);
+
+            std::array<VkWriteDescriptorSet, 5> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = m_globalDescriptorSets[i];
@@ -1665,6 +1674,14 @@ namespace slate {
             descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrites[3].descriptorCount = 1;
             descriptorWrites[3].pImageInfo = &shadowImageInfo;
+
+            descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[4].dstSet = m_globalDescriptorSets[i];
+            descriptorWrites[4].dstBinding = 4;
+            descriptorWrites[4].dstArrayElement = 0;
+            descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[4].descriptorCount = 1;
+            descriptorWrites[4].pBufferInfo = &dynamicLightBufferInfo;
 
             vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
@@ -1727,8 +1744,14 @@ namespace slate {
         shadowMapBinding.descriptorCount = 1;
         shadowMapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        std::array<VkDescriptorSetLayoutBinding, 4> globalBindings = {
-            uboLayoutBinding, sceneColorBinding, detailNormalBinding, shadowMapBinding
+        VkDescriptorSetLayoutBinding dynamicLightBinding{};
+        dynamicLightBinding.binding = 4;
+        dynamicLightBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        dynamicLightBinding.descriptorCount = 1;
+        dynamicLightBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 5> globalBindings = {
+            uboLayoutBinding, sceneColorBinding, detailNormalBinding, shadowMapBinding, dynamicLightBinding
         };
 
         VkDescriptorSetLayoutCreateInfo globalLayoutInfo{};
@@ -1889,6 +1912,48 @@ namespace slate {
             );
 
             vkMapMemory(m_device, m_materialBuffersMemory[i], 0, bufferSize, 0, &m_materialBuffersMapped[i]);
+        }
+    }
+
+    void VulkanRenderer::createDynamicLightBuffers() {
+        VkDeviceSize bufferSize = sizeof(DynamicLightBufferGPU);
+
+        m_dynamicLightBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        m_dynamicLightBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        m_dynamicLightBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            createBuffer(
+                bufferSize,
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                m_dynamicLightBuffers[i],
+                m_dynamicLightBuffersMemory[i]
+            );
+
+            vkMapMemory(m_device, m_dynamicLightBuffersMemory[i], 0, bufferSize, 0, &m_dynamicLightBuffersMapped[i]);
+
+            memset(m_dynamicLightBuffersMapped[i], 0, static_cast<size_t>(bufferSize));
+        }
+    }
+
+    void VulkanRenderer::updateDynamicLightBuffer() {
+        DynamicLightBufferGPU gpuBuffer{};
+
+        size_t numLights = std::min(m_dynamicLights.size(), static_cast<size_t>(MAX_DYNAMIC_LIGHTS));
+        gpuBuffer.count = static_cast<int32_t>(numLights);
+
+        for (size_t i = 0; i < numLights; i++) {
+            const DynamicPointLight& src = m_dynamicLights[i];
+            DynamicPointLightGPU& dst = gpuBuffer.lights[i];
+            dst.position = src.position;
+            dst.range = std::max(src.range, 0.1f);
+            dst.color = src.color;
+            dst.intensity = src.intensity;
+        }
+
+        for (size_t i = 0; i < m_dynamicLightBuffersMapped.size(); i++) {
+            memcpy(m_dynamicLightBuffersMapped[i], &gpuBuffer, sizeof(gpuBuffer));
         }
     }
 
@@ -3486,6 +3551,18 @@ namespace slate {
             vkUnmapMemory(m_device, m_uniformBuffersMemory[i]);
             vkDestroyBuffer(m_device, m_uniformBuffers[i], nullptr);
             vkFreeMemory(m_device, m_uniformBuffersMemory[i], nullptr);
+        }
+
+        for (size_t i = 0; i < m_materialBuffers.size(); i++) {
+            vkUnmapMemory(m_device, m_materialBuffersMemory[i]);
+            vkDestroyBuffer(m_device, m_materialBuffers[i], nullptr);
+            vkFreeMemory(m_device, m_materialBuffersMemory[i], nullptr);
+        }
+
+        for (size_t i = 0; i < m_dynamicLightBuffers.size(); i++) {
+            vkUnmapMemory(m_device, m_dynamicLightBuffersMemory[i]);
+            vkDestroyBuffer(m_device, m_dynamicLightBuffers[i], nullptr);
+            vkFreeMemory(m_device, m_dynamicLightBuffersMemory[i], nullptr);
         }
 
         if (m_descriptorSetLayout != VK_NULL_HANDLE) {
