@@ -47,14 +47,14 @@
 * **automatic earcut triangulation:** so it can handle the most complex of n-gons
 * **fully custom persistent ui system:** designed from scratch for efficiency and functionality
 * **shadow mapping:** custom 4096x4096 shadow mapping system with pcf and noise randomization
+* **physics:** jolt physics integration
 
 ---
 
 # future features:
 
-* scene saving
-* physics
 * scriptable objects
+* cmake / make / compiler integration
 
 ---
 
