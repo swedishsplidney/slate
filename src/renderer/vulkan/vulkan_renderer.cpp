@@ -2700,7 +2700,7 @@ namespace slate {
         m_shadowCasterSpheres.resize(m_sceneMeshes.size());
         for (size_t i = 0; i < m_sceneMeshes.size(); ++i) {
             const auto& mesh = m_sceneMeshes[i];
-            if (!mesh || mesh->isTransparent()) {
+            if (!mesh) {
                 m_shadowCasterSpheres[i] = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
                 continue;
             }

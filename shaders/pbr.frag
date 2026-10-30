@@ -558,22 +558,49 @@ void main() {
     // transmission
     if (transmission > 0.01) {
         ivec2 texSize = textureSize(sceneColorTexture, 0);
+
         if (texSize.x > 0 && texSize.y > 0) {
             vec2 screenUV = gl_FragCoord.xy / vec2(texSize);
-            vec3 glassSpecular = (mainSpecular * lightColor * NdotL) + ambientSpecular;
 
+            // fresnel
+            float NdotV_fresnel = clamp(dot(N, V), 0.0, 1.0);
+            vec3 fresnel = fresnelSchlick(
+                    NdotV_fresnel,
+                    vec3(iorF0)
+            );
+
+            // refraction
             float dispersion = mat.detailParams.z;
             vec3 backgroundScene;
+
             if (dispersion > 0.001) {
-                backgroundScene.r = sampleRefraction(V, N, ior - dispersion, screenUV, transmission).r;
-                backgroundScene.g = sampleRefraction(V, N, ior,              screenUV, transmission).g;
-                backgroundScene.b = sampleRefraction(V, N, ior + dispersion, screenUV, transmission).b;
+                backgroundScene.r =
+                sampleRefraction(V, N, ior - dispersion, screenUV, transmission).r;
+
+                backgroundScene.g =
+                sampleRefraction(V, N, ior, screenUV, transmission).g;
+
+                backgroundScene.b =
+                sampleRefraction(V, N, ior + dispersion, screenUV, transmission).b;
             } else {
-                backgroundScene = sampleRefraction(V, N, ior, screenUV, transmission);
+                backgroundScene = sampleRefraction(
+                        V, N, ior, screenUV, transmission
+                );
             }
 
-            vec3 transmittedLight = backgroundScene * albedo * (vec3(1.0) - F_env);
-            color = mix(color, transmittedLight + glassSpecular + emissive, transmission);
+            // reflection
+            vec3 glassReflection =
+            (mainSpecular * lightColor * NdotL * shadow)
+            + ambientSpecular;
+
+            // transmission
+            vec3 glassTransmission =
+            backgroundScene * albedo * (vec3(1.0) - fresnel);
+
+            vec3 glassColor =
+            glassReflection + glassTransmission + emissive;
+
+            color = mix(color, glassColor, transmission);
         }
     }
 
@@ -596,7 +623,11 @@ void main() {
     color += (dither - 0.5) / 255.0;
 
     // alpha
-    float glassEdgeAlpha = mix(baseAlpha * 0.2, baseAlpha, pow(1.0 - NdotV, 3.5));
-    float dielectricAlpha = mix(baseAlpha, glassEdgeAlpha, transmission);
-    outColor = vec4(color, mix(dielectricAlpha, 1.0, metallic));
+    float outputAlpha = baseAlpha;
+
+    if (transmission > 0.01) {
+        outputAlpha = 1.0;
+    }
+
+    outColor = vec4(color, outputAlpha);
 }

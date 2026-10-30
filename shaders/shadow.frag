@@ -31,13 +31,35 @@ layout(std430, set = 1, binding = 0) readonly buffer MaterialBuffer {
     MaterialGPU materials[];
 } materialBuffer;
 
+float interleavedGradientNoise(vec2 fragCoord) {
+    return fract(
+            52.9829189 *
+            fract(dot(fragCoord, vec2(0.06711056, 0.00583715)))
+    );
+}
+
 void main() {
     MaterialGPU mat = materialBuffer.materials[fragMaterialIndex];
 
     if (mat.alphaCutoff > 0.0) {
-        vec4 baseAlbedo = (mat.hasAlbedoTexture > 0) ? texture(albedoMap, fragTexCoord) : mat.albedoFactor;
+        vec4 baseAlbedo = (mat.hasAlbedoTexture > 0)
+        ? texture(albedoMap, fragTexCoord)
+        : mat.albedoFactor;
+
         if (baseAlbedo.a < mat.alphaCutoff) {
             discard;
         }
+    }
+
+    float transmission = clamp(
+            mat.transmissionFactor * (1.0 - mat.metallicFactor),
+            0.0,
+            1.0
+    );
+
+    float noise = interleavedGradientNoise(gl_FragCoord.xy);
+
+    if (noise < transmission) {
+        discard;
     }
 }
