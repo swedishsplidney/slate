@@ -18,6 +18,7 @@
 #include "ui/ui_menu_bar.hpp"
 #include "ui/ui_hierarchy_panel.hpp"
 #include "ui/ui_scrollable_container.hpp"
+#include "stb_image.h"
 
 #include <SDL3/SDL_vulkan.h>
 #include <algorithm>
@@ -541,19 +542,31 @@ void Engine::registerDefaultCommands() {
 
 Engine::~Engine() { cleanup(); }
 
-void Engine::initWindow() {
-  if (!SDL_Init(SDL_INIT_VIDEO)) {
-    throw std::runtime_error("failed to initialize SDL3: " +
-                             std::string(SDL_GetError()));
-  }
+    void Engine::initWindow() {
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        throw std::runtime_error("failed to initialize SDL3: " +
+                                     std::string(SDL_GetError()));
+    }
 
-  SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
+    SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
 
-  m_window = SDL_CreateWindow("Slate Engine", m_width, m_height, flags);
-  if (!m_window) {
-    throw std::runtime_error("failed to create SDL3 window: " +
-                             std::string(SDL_GetError()));
-  }
+    m_window = SDL_CreateWindow("Slate Engine", m_width, m_height, flags);
+    if (!m_window) {
+        throw std::runtime_error("failed to create SDL3 window: " +
+                                     std::string(SDL_GetError()));
+    }
+
+    int iconWidth, iconHeight, iconChannels;
+    unsigned char* iconPixels = stbi_load("assets/icon.png", &iconWidth, &iconHeight, &iconChannels, 4);
+    if (iconPixels) {
+        SDL_Surface* iconSurface = SDL_CreateSurfaceFrom(
+            iconWidth, iconHeight, SDL_PIXELFORMAT_RGBA32, iconPixels, iconWidth * 4);
+        if (iconSurface) {
+            SDL_SetWindowIcon(m_window, iconSurface);
+            SDL_DestroySurface(iconSurface);
+        }
+        stbi_image_free(iconPixels);
+    }
 }
 
 void Engine::run() { mainLoop(); }
