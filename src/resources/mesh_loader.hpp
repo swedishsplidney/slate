@@ -4,6 +4,7 @@
 #include <vector>
 #include "renderer/vertex.hpp"
 #include "resources/material.hpp"
+#include "ui/ui_vertex.hpp"
 
 namespace slate {
 
@@ -14,7 +15,7 @@ namespace slate {
         static bool loadOBJ(
             const std::string& filePath,
             std::vector<Vertex>& outVertices,
-            std::vector<uint16_t>& outIndices,
+            std::vector<UIIndex>& outIndices,
             std::vector<Material>& outMaterials
         );
     };

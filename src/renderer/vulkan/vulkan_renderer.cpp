@@ -375,7 +375,7 @@ namespace slate {
 
     void VulkanRenderer::createGridMesh() {
         std::vector<Vertex> vertices;
-        std::vector<uint16_t> indices;
+        std::vector<UIIndex> indices;
 
         GridGenerator::generatePlane(250.0f, vertices, indices);
 
@@ -1537,20 +1537,23 @@ namespace slate {
     void VulkanRenderer::createDescriptorPoolAndSets() {
         std::array<VkDescriptorPoolSize, 3> poolSizes{};
 
+        const uint32_t materialSetBudget = static_cast<uint32_t>(MAX_MATERIALS * MAX_FRAMES_IN_FLIGHT);
+
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
 
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 100);
+        poolSizes[1].descriptorCount = materialSetBudget * 4 + 64;
 
         poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 50);
+        poolSizes[2].descriptorCount = materialSetBudget + 32;
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 50);
+        poolInfo.maxSets = materialSetBudget + 16;
 
         if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
@@ -2379,7 +2382,7 @@ namespace slate {
 
     void VulkanRenderer::createGizmoMesh() {
         std::vector<Vertex> vertices;
-        std::vector<uint16_t> indices;
+        std::vector<UIIndex> indices;
 
         GizmoGenerator::generateTranslateGizmo(vertices, indices);
 
@@ -2390,7 +2393,7 @@ namespace slate {
         m_gizmoMode = mode;
 
         std::vector<Vertex> vertices;
-        std::vector<uint16_t> indices;
+        std::vector<UIIndex> indices;
 
         GizmoGenerator::generateGizmo(static_cast<GizmoGenerator::Mode>(mode), vertices, indices);
 
@@ -3509,7 +3512,7 @@ namespace slate {
         std::cout << "vulkan UI graphics pipeline successfully compiled!" << std::endl;
     }
 
-    void VulkanRenderer::updateUIGeometryBuffers(const std::vector<UIVertex>& vertices, const std::vector<uint16_t>& indices) {
+    void VulkanRenderer::updateUIGeometryBuffers(const std::vector<UIVertex>& vertices, const std::vector<UIIndex>& indices) {
         if (vertices.empty() || indices.empty()) {
             m_uiVerticesMemory.clear();
             m_uiIndicesMemory.clear();

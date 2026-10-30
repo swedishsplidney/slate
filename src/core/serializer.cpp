@@ -4,8 +4,15 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <filesystem>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
+#include "resources/mesh_loader.hpp"
+#include "physics/physics_engine.hpp"
+#include "physics/collider_generator.hpp"
+#include <Jolt/Physics/Body/BodyCreationSettings.h>
+#include <glm/gtc/matrix_transform.hpp>
+#include <Jolt/Physics/Collision/Shape/ScaledShape.h>
 
 namespace slate {
 
@@ -35,7 +42,9 @@ namespace slate {
 
             file << "[[entity]]\n";
             file << "index = " << i << "\n";
-            file << "name = \"" << mesh->getName() << "\"\n";
+            std::string meshName = mesh->getName();
+            if (meshName.empty()) meshName = std::filesystem::path(mesh->getPath()).stem().string();
+            file << "name = \"" << meshName << "\"\n";
 
             file << "mesh_path = \"" << mesh->getPath() << "\"\n";
 
@@ -129,19 +138,31 @@ namespace slate {
         return glm::vec4(x, y, z, w);
     }
 
-    bool Serializer::loadScene(const std::string& filepath, VulkanRenderer* renderer) {
+    bool Serializer::loadScene(const std::string& filepath, VulkanRenderer* renderer, PhysicsEngine* physics) {
         if (!renderer) {
             std::cout << "[serializer error] renderer is null, cannot load scene.\n";
             return false;
         }
-
-        renderer->clearScene();
 
         std::ifstream file(filepath);
         if (!file.is_open()) {
             std::cout << "[serializer error] failed to open file for reading: " << filepath << "\n";
             return false;
         }
+
+        for (auto& mesh : renderer->getSceneMeshes()) {
+            if (!mesh) continue;
+            JPH::BodyID id = mesh->getBodyID();
+            JPH::PhysicsSystem* ps = mesh->getPhysicsSystem();
+            if (id.IsInvalid() || !ps) continue;
+
+            auto& bi = ps->GetBodyInterface();
+            if (bi.IsAdded(id)) bi.RemoveBody(id);
+            bi.DestroyBody(id);
+            mesh->setBodyID(JPH::BodyID());
+        }
+
+        renderer->clearScene();
 
         std::string line;
         std::string currentMeshPath = "";
@@ -158,7 +179,7 @@ namespace slate {
             if (currentMeshPath.empty()) return;
 
             std::vector<Vertex> vertices;
-            std::vector<uint16_t> indices;
+            std::vector<UIIndex> indices;
             auto& globalMaterials = renderer->getGlobalMaterials();
             size_t matsBefore = globalMaterials.size();
 
@@ -166,52 +187,90 @@ namespace slate {
             if (currentMeshPath.find(".obj") != std::string::npos) {
                 loaded = MeshLoader::loadOBJ(currentMeshPath, vertices, indices, globalMaterials);
             }
+            if (!loaded || vertices.empty()) {
+                std::cerr << "[serializer error] failed to load mesh: " << currentMeshPath << "\n";
+                return;
+            }
 
-            if (loaded && !vertices.empty()) {
-                renderer->flushMaterialsToGPU();
+            uint32_t matId = 0;
+            if (globalMaterials.size() > matsBefore) {
+                auto& m = globalMaterials[matsBefore];
+                matId = m.materialId;
+                m.gpuData.albedoFactor = albedo;
+                m.gpuData.roughnessFactor = roughness;
+                m.gpuData.metallicFactor = metallic;
+                m.gpuData.ior = ior;
+                m.gpuData.transmissionFactor = transmission;
+            }
 
-                uint32_t matId = 0;
-                if (globalMaterials.size() > matsBefore) {
-                    matId = globalMaterials[matsBefore].materialId;
-                    globalMaterials[matsBefore].gpuData.albedoFactor = albedo;
-                    globalMaterials[matsBefore].gpuData.roughnessFactor = roughness;
-                    globalMaterials[matsBefore].gpuData.metallicFactor = metallic;
-                    globalMaterials[matsBefore].gpuData.ior = ior;
-                    globalMaterials[matsBefore].gpuData.transmissionFactor = transmission;
+            renderer->flushMaterialsToGPU();
+            for (size_t i = matsBefore; i < globalMaterials.size(); ++i) {
+                renderer->createMaterialDescriptorSets(globalMaterials[i]);
+            }
+
+            JPH::ShapeRefC shape;
+            if (hasPhysics && physics) {
+                auto shapeResult = ColliderGenerator::createOptimalShape(vertices);
+                if (!shapeResult.HasError()) shape = shapeResult.Get();
+            }
+
+            bool transparent = (transmission > 0.0f || albedo.a < 1.0f);
+            auto newMesh = std::make_unique<Mesh>(
+                renderer->getDevice(), renderer->getPhysicalDevice(),
+                vertices, indices, matId, transparent);
+
+            std::string meshName = currentEntityName;
+            if (meshName.empty()) meshName = std::filesystem::path(currentMeshPath).stem().string();
+            if (meshName.empty()) meshName = "LoadedMesh";
+            newMesh->setName(meshName);
+            newMesh->setPath(currentMeshPath);
+
+            glm::mat4 model(1.0f);
+            model = glm::translate(model, pos);
+            glm::quat q(glm::radians(rot));
+            model = model * glm::mat4_cast(q);
+            model = glm::scale(model, scale);
+            newMesh->setModelMatrix(model);
+
+            if (shape) {
+                newMesh->setPhysicsSystem(&physics->getPhysicsSystem());
+                newMesh->setBaseShape(shape);
+
+                JPH::ShapeRefC bodyShape = shape;
+                glm::vec3 safeScale = glm::max(glm::abs(scale), glm::vec3(0.001f)) * glm::sign(scale);
+                if (safeScale != glm::vec3(1.0f)) {
+                    JPH::ScaledShapeSettings scaledSettings(shape, JPH::Vec3(safeScale.x, safeScale.y, safeScale.z));
+                    auto scaledResult = scaledSettings.Create();
+                    if (!scaledResult.HasError()) bodyShape = scaledResult.Get();
                 }
 
-                bool transparent = (transmission > 0.0f || albedo.a < 1.0f);
-                auto newMesh = std::make_unique<Mesh>(
-                    renderer->getDevice(),
-                    renderer->getPhysicalDevice(),
-                    vertices,
-                    indices,
-                    matId,
-                    transparent
-                );
+                auto motionType = static_cast<JPH::EMotionType>(motionTypeInt);
+                uint8_t layer = (motionType == JPH::EMotionType::Static) ? slate::Layers::NON_MOVING : slate::Layers::MOVING;
 
-                newMesh->setName(currentEntityName.empty() ? "LoadedMesh" : currentEntityName);
-                newMesh->setPath(currentMeshPath);
+                JPH::BodyCreationSettings settings(
+                    bodyShape,
+                    JPH::RVec3(pos.x, pos.y, pos.z),
+                    JPH::Quat(q.x, q.y, q.z, q.w),
+                    motionType, layer);
+                settings.mAllowDynamicOrKinematic = true;
 
-                glm::mat4 model(1.0f);
-                model = glm::translate(model, pos);
-                glm::quat q(glm::radians(rot));
-                model = model * glm::mat4_cast(q);
-                model = glm::scale(model, scale);
-                newMesh->setModelMatrix(model);
-
-                renderer->addMeshToScene(std::move(newMesh));
-
-                if (hasPhysics) {
-                    auto& addedMesh = renderer->getSceneMeshes().back();
-
-                    addedMesh->setPhysicsProperty("motionType", static_cast<float>(motionTypeInt));
-
-                    addedMesh->setPhysicsProperty("friction", friction);
-                    addedMesh->setPhysicsProperty("restitution", restitution);
-                    addedMesh->setPhysicsProperty("gravityFactor", gravityFactor);
-                    addedMesh->setPhysicsProperty("mass", mass);
+                auto& bi = physics->getPhysicsSystem().GetBodyInterface();
+                JPH::Body* body = bi.CreateBody(settings);
+                if (body) {
+                    bi.AddBody(body->GetID(), motionType == JPH::EMotionType::Static
+                        ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
+                    newMesh->setBodyID(body->GetID());
                 }
+            }
+
+            renderer->addMeshToScene(std::move(newMesh));
+
+            if (hasPhysics && shape) {
+                auto& added = renderer->getSceneMeshes().back();
+                added->setPhysicsProperty("friction", friction);
+                added->setPhysicsProperty("restitution", restitution);
+                added->setPhysicsProperty("gravityFactor", gravityFactor);
+                added->setPhysicsProperty("mass", mass);
             }
         };
 

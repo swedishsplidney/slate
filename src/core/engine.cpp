@@ -849,9 +849,16 @@ void Engine::mainLoop() {
         continue;
       }
 
-      if (m_uiManager) {
-        m_uiManager->onEvent(event);
-      }
+        const bool typing = SDL_TextInputActive(m_window);
+
+        if (m_uiManager) {
+            m_uiManager->onEvent(event);
+        }
+
+        if (typing && (event.type == SDL_EVENT_KEY_DOWN ||
+                       event.type == SDL_EVENT_KEY_UP)) {
+            continue;
+                       }
 
       // global shortcuts
       if (event.type == SDL_EVENT_KEY_DOWN) {
@@ -886,6 +893,8 @@ void Engine::mainLoop() {
         if ((event.key.mod & SDL_KMOD_CTRL) &&
             event.key.scancode == SDL_SCANCODE_O) {
           m_commandRegistry->execute("file.load_scene", m_commandContext, {});
+          m_selectedMeshIndex = 0;
+          updateHierarchyItems();
           std::cout << "[editor] Open scene dialog triggered via shortcut!\n";
             }
       }

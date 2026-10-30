@@ -16,7 +16,7 @@ namespace slate {
         void setUIManager(UIManager* manager) { m_uiManager = manager; }
 
         void onEvent(const SDL_Event& event) override;
-        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override;
+        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) override;
 
     private:
         void updateLayout();

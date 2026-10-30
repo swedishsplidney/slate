@@ -33,7 +33,7 @@ namespace slate {
             return false;
         }
 
-        bool success = Serializer::loadScene(m_filepath, context.renderer);
+        bool success = Serializer::loadScene(m_filepath, context.renderer, context.physicsEngine);
 
         if (success && context.uiManager) {
             context.uiManager->markDirty();

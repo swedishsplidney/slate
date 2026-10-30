@@ -357,7 +357,7 @@ namespace slate {
         UIElement::onEvent(event);
     }
 
-    void UIInspectorPanel::generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) {
+    void UIInspectorPanel::generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) {
         if (!m_visible) return;
 
         if (m_children.size() < 4) return;
@@ -381,7 +381,7 @@ namespace slate {
 
             glm::vec4 panelBgColor(0.004f, 0.0045f, 0.0055f, 1.0f);
 
-            uint16_t panelIdx = static_cast<uint16_t>(vertices.size());
+            uint16_t panelIdx = static_cast<UIIndex>(vertices.size());
             vertices.push_back(UIVertex{.pos = absPos, .color = panelBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth, absPos.y), .color = panelBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth, absPos.y + totalHeight), .color = panelBgColor, .uv = glm::vec2(-1.0f)});
@@ -394,7 +394,7 @@ namespace slate {
             glm::vec2 cPos = headerBar->getAbsolutePosition();
             glm::vec2 cSize = headerBar->getSize();
             glm::vec4 cColor = headerBar->getColor();
-            uint16_t cIdx = static_cast<uint16_t>(vertices.size());
+            uint16_t cIdx = static_cast<UIIndex>(vertices.size());
             vertices.push_back(UIVertex{.pos = cPos, .color = cColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y), .color = cColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(cPos.x + cSize.x, cPos.y + cSize.y), .color = cColor, .uv = glm::vec2(-1.0f)});
@@ -420,7 +420,7 @@ namespace slate {
             glm::vec2 dPos = transformDropdown->getAbsolutePosition();
             glm::vec2 dSize = transformDropdown->getSize();
             float headerH = transformDropdown->getHeaderHeight();
-            uint16_t bgIdx = static_cast<uint16_t>(vertices.size());
+            uint16_t bgIdx = static_cast<UIIndex>(vertices.size());
             vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + dSize.y), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
@@ -433,7 +433,7 @@ namespace slate {
             glm::vec2 dPos = materialDropdown->getAbsolutePosition();
             glm::vec2 dSize = materialDropdown->getSize();
             float headerH = materialDropdown->getHeaderHeight();
-            uint16_t bgIdx = static_cast<uint16_t>(vertices.size());
+            uint16_t bgIdx = static_cast<UIIndex>(vertices.size());
             vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + dSize.y), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
@@ -446,7 +446,7 @@ namespace slate {
             glm::vec2 dPos = physicsDropdown->getAbsolutePosition();
             glm::vec2 dSize = physicsDropdown->getSize();
             float headerH = physicsDropdown->getHeaderHeight();
-            uint16_t bgIdx = static_cast<uint16_t>(vertices.size());
+            uint16_t bgIdx = static_cast<UIIndex>(vertices.size());
             vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + headerH), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(dPos.x + dSize.x, dPos.y + dSize.y), .color = dropdownBgColor, .uv = glm::vec2(-1.0f)});
@@ -454,11 +454,6 @@ namespace slate {
             indices.push_back(bgIdx + 0); indices.push_back(bgIdx + 1); indices.push_back(bgIdx + 2);
             indices.push_back(bgIdx + 0); indices.push_back(bgIdx + 2); indices.push_back(bgIdx + 3);
         }
-
-        // generate dropdown geometry
-        transformDropdown->generateGeometry(vertices, indices);
-        materialDropdown->generateGeometry(vertices, indices);
-        physicsDropdown->generateGeometry(vertices, indices);
 
         glm::vec2 transAbsPos = transformDropdown->getAbsolutePosition();
         if (transformDropdown->isExpanded()) {
@@ -639,16 +634,16 @@ namespace slate {
         }
     }
     void UIInspectorPanel::setPhysicsMass(float mass) {
-        if (m_massInputBox) m_massInputBox->setValue(mass);
+        if (m_massInputBox) m_massInputBox->setValueWithoutCallback(mass);
     }
     void UIInspectorPanel::setPhysicsBounciness(float bounce) {
-        if (m_bouncinessInputBox) m_bouncinessInputBox->setValue(bounce);
+        if (m_bouncinessInputBox) m_bouncinessInputBox->setValueWithoutCallback(bounce);
     }
     void UIInspectorPanel::setPhysicsFriction(float friction) {
-        if (m_frictionInputBox) m_frictionInputBox->setValue(friction);
+        if (m_frictionInputBox) m_frictionInputBox->setValueWithoutCallback(friction);
     }
     void UIInspectorPanel::setPhysicsGravityFactor(float gravity) {
-        if (m_gravityFactorInputBox) m_gravityFactorInputBox->setValue(gravity);
+        if (m_gravityFactorInputBox) m_gravityFactorInputBox->setValueWithoutCallback(gravity);
     }
 
 }

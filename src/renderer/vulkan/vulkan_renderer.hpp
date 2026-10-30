@@ -98,7 +98,7 @@ namespace slate {
             return static_cast<uint32_t>(m_sceneMeshes.size() - 1);
         }
 
-        void updateUIGeometryBuffers(const std::vector<UIVertex>& vertices, const std::vector<uint16_t>& indices);
+        void updateUIGeometryBuffers(const std::vector<UIVertex>& vertices, const std::vector<UIIndex>& indices);
 
         void updateMaterials(const std::vector<Material>& materials);
 
@@ -113,19 +113,35 @@ namespace slate {
 
         void flushMaterialsToGPU();
 
+        void freeMaterialDescriptorSets(Material& mat) {
+            if (!mat.descriptorSets.empty() && m_descriptorPool != VK_NULL_HANDLE) {
+                vkFreeDescriptorSets(m_device, m_descriptorPool,
+                                     static_cast<uint32_t>(mat.descriptorSets.size()),
+                                     mat.descriptorSets.data());
+            }
+            mat.descriptorSets.clear();
+        }
+
         void removeLastMeshFromScene() {
             if (!m_sceneMeshes.empty()) {
+                vkDeviceWaitIdle(m_device);
                 m_sceneMeshes.pop_back();
             }
         }
 
         void clearScene() {
+            vkDeviceWaitIdle(m_device);
             m_sceneMeshes.clear();
+            for (auto& mat : m_globalMaterials) freeMaterialDescriptorSets(mat);
             m_globalMaterials.clear();
         }
 
         void popGlobalMaterials(size_t count) {
             if (count <= m_globalMaterials.size()) {
+                vkDeviceWaitIdle(m_device);
+                for (auto it = m_globalMaterials.end() - count; it != m_globalMaterials.end(); ++it) {
+                    freeMaterialDescriptorSets(*it);
+                }
                 m_globalMaterials.erase(m_globalMaterials.end() - count, m_globalMaterials.end());
             }
         }
@@ -266,7 +282,7 @@ namespace slate {
         VkDeviceMemory m_uiIndexBufferMemory{VK_NULL_HANDLE};
 
         std::vector<UIVertex> m_uiVerticesMemory;
-        std::vector<uint16_t> m_uiIndicesMemory;
+        std::vector<UIIndex> m_uiIndicesMemory;
 
         VkImage m_depthImage = VK_NULL_HANDLE;
         VkDeviceMemory m_depthImageMemory = VK_NULL_HANDLE;

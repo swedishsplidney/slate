@@ -98,7 +98,7 @@ namespace slate {
             }
         }
 
-        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override {
+        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) override {
             if (!m_visible) return;
 
             // sidebars and viewport

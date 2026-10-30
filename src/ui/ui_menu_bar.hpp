@@ -37,7 +37,7 @@ namespace slate {
         void setFontLoader(std::shared_ptr<FontLoader> fontLoader) { m_fontLoader = std::move(fontLoader); }
 
         void onEvent(const SDL_Event& event) override;
-        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override;
+        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) override;
 
     private:
         std::vector<MenuHeader> m_menus;

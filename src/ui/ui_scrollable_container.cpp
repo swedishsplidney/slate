@@ -52,14 +52,10 @@ namespace slate {
         }
     }
 
-    void UIScrollableContainer::generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) {
+    void UIScrollableContainer::generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) {
         if (!m_visible) return;
 
         updateLayout();
-
-        for (auto& child : m_children) {
-            child->generateGeometry(vertices, indices);
-        }
     }
 
 }

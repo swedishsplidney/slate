@@ -15,7 +15,7 @@ namespace slate {
         void setSize(glm::vec2 size) override;
         void buildDefaultLayout();
         void onEvent(const SDL_Event& event) override;
-        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override;
+        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) override;
 
         void setFontLoader(std::shared_ptr<FontLoader> fontLoader) { m_fontLoader = fontLoader; }
         void setSceneItems(const std::vector<std::string>& itemNames);

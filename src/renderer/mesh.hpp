@@ -14,6 +14,7 @@
 #include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Collision/Shape/ScaledShape.h>
+#include "ui/ui_vertex.hpp"
 
 namespace slate {
 
@@ -21,7 +22,7 @@ namespace slate {
     public:
         Mesh(VkDevice device, VkPhysicalDevice physicalDevice,
             const std::vector<Vertex>& vertices,
-            const std::vector<uint16_t>& indices,
+            const std::vector<UIIndex>& indices,
             uint32_t materialId = 0,
             bool transparent = false,
             const std::string& name = "Mesh");
@@ -92,7 +93,7 @@ namespace slate {
         }
 
         const std::vector<Vertex>& getVertices() const { return m_vertices; }
-        const std::vector<uint16_t>& getIndices() const { return m_indices; }
+        const std::vector<UIIndex>& getIndices() const { return m_indices; }
 
         void setTransparent(bool transparent) { m_transparent = transparent; }
         void setPath(const std::string& path) { m_filePath = path; }
@@ -140,7 +141,7 @@ namespace slate {
 
     private:
         void createVertexBuffer(VkPhysicalDevice physicalDevice, const std::vector<Vertex>& vertices);
-        void createIndexBuffer(VkPhysicalDevice physicalDevice, const std::vector<uint16_t>& indices);
+        void createIndexBuffer(VkPhysicalDevice physicalDevice, const std::vector<UIIndex>& indices);
 
         VkDevice m_device = VK_NULL_HANDLE;
         VkBuffer m_vertexBuffer = VK_NULL_HANDLE;
@@ -163,7 +164,7 @@ namespace slate {
         glm::vec3 m_boundsMax{0.0f};
 
         std::vector<Vertex> m_vertices;
-        std::vector<uint16_t> m_indices;
+        std::vector<UIIndex> m_indices;
         std::string m_filePath;
 
         JPH::ShapeRefC m_baseShape{nullptr};

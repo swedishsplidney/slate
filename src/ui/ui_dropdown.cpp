@@ -28,16 +28,13 @@ namespace slate {
             SDL_Event refreshEvent;
             SDL_zero(refreshEvent);
             refreshEvent.type = SDL_EVENT_USER;
-            SDL_PushEvent(&refreshEvent);
+            markDirty();
         }
     }
 
     void UIDropdown::update(float deltaTime) {
         UIElement::update(deltaTime);
         if (m_contentContainer) {
-            if (m_contentContainer->isParentExpired()) {
-                m_contentContainer->setParent(shared_from_this());
-            }
             if (m_isExpanded) {
                 m_contentContainer->update(deltaTime);
             }
@@ -47,13 +44,6 @@ namespace slate {
     void UIDropdown::onEvent(const SDL_Event& event) {
         UIElement::onEvent(event);
         if (m_contentContainer) {
-            if (m_contentContainer->isParentExpired()) {
-                m_contentContainer->setParent(shared_from_this());
-            }
-        }
-
-        if (m_isExpanded && m_contentContainer) {
-            m_contentContainer->onEvent(event);
         }
 
         // click detection
@@ -84,17 +74,11 @@ namespace slate {
         }
     }
 
-    void UIDropdown::generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) {
+    void UIDropdown::generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) {
         if (!m_visible) return;
 
-        if (m_contentContainer) {
-            if (m_contentContainer->isParentExpired()) {
-                m_contentContainer->setParent(shared_from_this());
-            }
-        }
-
         glm::vec2 absPos = getAbsolutePosition();
-        uint16_t headerIdx = static_cast<uint16_t>(vertices.size());
+        uint16_t headerIdx = static_cast<UIIndex>(vertices.size());
 
         glm::vec4 headerColor(0.016f, 0.018f, 0.023f, 1.0f);
 
@@ -118,9 +102,7 @@ namespace slate {
 
     void UIDropdown::addContentElement(const std::shared_ptr<UIElement>& element) {
         if (m_contentContainer) {
-            if (m_contentContainer->isParentExpired()) {
-                m_contentContainer->setParent(shared_from_this());
-            }
+            if (m_children.empty()) addChild(m_contentContainer);
             m_contentContainer->addChild(element);
         }
     }

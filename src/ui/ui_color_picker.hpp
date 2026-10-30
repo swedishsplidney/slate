@@ -12,7 +12,7 @@ namespace slate {
         UIColorPicker(const std::string& name, glm::vec2 position, glm::vec2 size);
 
         void onEvent(const SDL_Event& event) override;
-        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override;
+        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) override;
 
         void setColorValue(const glm::vec4& color);
         const glm::vec4& getColorValue() const { return m_color; }

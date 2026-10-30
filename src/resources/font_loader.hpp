@@ -30,12 +30,14 @@ namespace slate {
             glm::vec2 position,
             glm::vec4 color,
             std::vector<UIVertex>& outVertices,
-            std::vector<uint16_t>& outIndices
+            std::vector<UIIndex>& outIndices
         );
 
         const std::vector<unsigned char>& getAtlasBitmap() const { return m_atlasBitmap; }
         int getAtlasWidth() const { return m_atlasWidth; }
         int getAtlasHeight() const { return m_atlasHeight; }
+
+        float measureText(const std::string& text) const;
 
     private:
         int m_atlasWidth{512};

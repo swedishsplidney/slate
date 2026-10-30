@@ -6,7 +6,7 @@ namespace slate {
 
     Mesh::Mesh(VkDevice device, VkPhysicalDevice physicalDevice,
            const std::vector<Vertex>& vertices,
-           const std::vector<uint16_t>& indices,
+           const std::vector<UIIndex>& indices,
            uint32_t materialId,
            bool transparent,
            const std::string& name)
@@ -94,7 +94,7 @@ namespace slate {
         vkUnmapMemory(m_device, m_vertexBufferMemory);
     }
 
-    void Mesh::createIndexBuffer(VkPhysicalDevice physicalDevice, const std::vector<uint16_t>& indices) {
+    void Mesh::createIndexBuffer(VkPhysicalDevice physicalDevice, const std::vector<UIIndex>& indices) {
         m_indexCount = static_cast<uint32_t>(indices.size());
         VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 

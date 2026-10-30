@@ -144,7 +144,7 @@ namespace slate {
     bool MeshLoader::loadOBJ(
         const std::string& filePath,
         std::vector<Vertex>& outVertices,
-        std::vector<uint16_t>& outIndices,
+        std::vector<UIIndex>& outIndices,
         std::vector<Material>& outMaterials
     ) {
         fs::path objPath(filePath);
@@ -334,7 +334,7 @@ namespace slate {
 
                 auto addVertex = [&](const Vertex& v) -> uint16_t {
                     if (uniqueVertices.count(v) == 0) {
-                        uniqueVertices[v] = static_cast<uint16_t>(outVertices.size());
+                        uniqueVertices[v] = static_cast<UIIndex>(outVertices.size());
                         outVertices.push_back(v);
                     }
                     return uniqueVertices[v];

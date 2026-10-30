@@ -46,7 +46,7 @@ namespace slate {
         }
     }
 
-    void UIHierarchyPanel::generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) {
+    void UIHierarchyPanel::generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) {
         if (!m_visible) return;
 
         glm::vec2 absPos = getAbsolutePosition();
@@ -55,7 +55,7 @@ namespace slate {
 
         // bg
         glm::vec4 panelBgColor(0.004f, 0.0045f, 0.0055f, 1.0f);
-        uint16_t panelIdx = static_cast<uint16_t>(vertices.size());
+        uint16_t panelIdx = static_cast<UIIndex>(vertices.size());
         vertices.push_back(UIVertex{.pos = absPos, .color = panelBgColor, .uv = glm::vec2(-1.0f)});
         vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth, absPos.y), .color = panelBgColor, .uv = glm::vec2(-1.0f)});
         vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth, absPos.y + panelHeight), .color = panelBgColor, .uv = glm::vec2(-1.0f)});
@@ -65,7 +65,7 @@ namespace slate {
 
         // title bar
         glm::vec4 headerColor(0.016f, 0.018f, 0.023f, 1.0f);
-        uint16_t hIdx = static_cast<uint16_t>(vertices.size());
+        uint16_t hIdx = static_cast<UIIndex>(vertices.size());
         vertices.push_back(UIVertex{.pos = absPos, .color = headerColor, .uv = glm::vec2(-1.0f)});
         vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth, absPos.y), .color = headerColor, .uv = glm::vec2(-1.0f)});
         vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth, absPos.y + 28.0f), .color = headerColor, .uv = glm::vec2(-1.0f)});
@@ -83,7 +83,7 @@ namespace slate {
             float itemY = startY + (i * 24.0f);
             if (static_cast<int>(i) == m_selectedIndex) {
                 glm::vec4 selColor(0.20f, 0.25f, 0.40f, 1.0f);
-                uint16_t sIdx = static_cast<uint16_t>(vertices.size());
+                uint16_t sIdx = static_cast<UIIndex>(vertices.size());
                 vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + 4.0f, itemY), .color = selColor, .uv = glm::vec2(-1.0f)});
                 vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth - 4.0f, itemY), .color = selColor, .uv = glm::vec2(-1.0f)});
                 vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + panelWidth - 4.0f, itemY + 22.0f), .color = selColor, .uv = glm::vec2(-1.0f)});

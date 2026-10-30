@@ -8,7 +8,7 @@ namespace slate {
 
     class GridGenerator {
     public:
-        static void generatePlane(float size, std::vector<Vertex>& outVertices, std::vector<uint16_t>& outIndices) {
+        static void generatePlane(float size, std::vector<Vertex>& outVertices, std::vector<UIIndex>& outIndices) {
             outVertices.clear();
             outIndices.clear();
             
@@ -46,7 +46,7 @@ namespace slate {
             }
         }
 
-        static void generateAxes(float size, std::vector<Vertex>& outVertices, std::vector<uint16_t>& outIndices) {
+        static void generateAxes(float size, std::vector<Vertex>& outVertices, std::vector<UIIndex>& outIndices) {
             outVertices.clear();
             outIndices.clear();
         }

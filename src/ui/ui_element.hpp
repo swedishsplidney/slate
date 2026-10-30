@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <cstdint>
+#include <functional>
 #include <SDL3/SDL_events.h>
 #include "ui/ui_vertex.hpp"
 
@@ -25,7 +26,7 @@ namespace slate {
         virtual void update(float deltaTime);
         virtual void onEvent(const SDL_Event& event);
 
-        virtual void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices);
+        virtual void generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices);
 
         // getters & setters
         const std::string& getName() const { return m_name; }
@@ -48,6 +49,13 @@ namespace slate {
 
         const std::vector<std::shared_ptr<UIElement>>& getChildren() const { return m_children; }
 
+        void markDirty();
+        void setDirtyCallback(std::function<void()> cb) { m_onDirty = std::move(cb); }
+        bool isOverlay() const { return m_overlay; }
+        void setOverlay(bool o) { m_overlay = o; }
+        float getCornerRadius() const { return m_cornerRadius; }
+        void setCornerRadius(float r) { m_cornerRadius = r; }
+
     protected:
         std::string m_name;
         glm::vec2 m_position;
@@ -59,6 +67,7 @@ namespace slate {
 
         std::weak_ptr<UIElement> m_parent;
         std::vector<std::shared_ptr<UIElement>> m_children;
+        float m_cornerRadius{0.0f}; bool m_overlay{false}; std::function<void()> m_onDirty;
     };
 
 }

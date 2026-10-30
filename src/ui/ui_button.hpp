@@ -15,7 +15,7 @@ namespace slate {
         void setFontLoader(std::shared_ptr<FontLoader> fontLoader) { m_fontLoader = fontLoader; }
         void setText(const std::string& text) { m_text = text; }
 
-        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) override {
+        void generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) override {
             UIElement::generateGeometry(vertices, indices);
 
             if (!m_text.empty() && m_fontLoader) {

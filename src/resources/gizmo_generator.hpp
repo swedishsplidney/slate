@@ -14,7 +14,7 @@ namespace slate {
             Rotate = 1
         };
 
-        static void generateGizmo(Mode mode, std::vector<Vertex>& outVertices, std::vector<uint16_t>& outIndices) {
+        static void generateGizmo(Mode mode, std::vector<Vertex>& outVertices, std::vector<UIIndex>& outIndices) {
             if (mode == Mode::Translate) {
                 generateTranslateGizmo(outVertices, outIndices);
             } else if (mode == Mode::Rotate) {
@@ -22,7 +22,7 @@ namespace slate {
             }
         }
 
-        static void generateTranslateGizmo(std::vector<Vertex>& outVertices, std::vector<uint16_t>& outIndices) {
+        static void generateTranslateGizmo(std::vector<Vertex>& outVertices, std::vector<UIIndex>& outIndices) {
             outVertices.clear();
             outIndices.clear();
 
@@ -37,7 +37,7 @@ namespace slate {
                 glm::vec3 tangent = glm::normalize(glm::cross(dir, up));
                 glm::vec3 bitangent = glm::normalize(glm::cross(dir, tangent));
 
-                uint16_t baseIndex = static_cast<uint16_t>(outVertices.size());
+                uint16_t baseIndex = static_cast<UIIndex>(outVertices.size());
 
                 for (int i = 0; i <= segments; ++i) {
                     float theta = (static_cast<float>(i) / segments) * 2.0f * 3.14159265359f;
@@ -62,7 +62,7 @@ namespace slate {
                     outIndices.push_back(t1);
                 }
 
-                uint16_t tipBaseIndex = static_cast<uint16_t>(outVertices.size());
+                uint16_t tipBaseIndex = static_cast<UIIndex>(outVertices.size());
                 uint16_t tipIndex = tipBaseIndex + segments;
 
                 for (int i = 0; i < segments; ++i) {
@@ -102,7 +102,7 @@ namespace slate {
             add3DArrow(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.22f, 0.40f, 0.85f));
         }
 
-        static void generateRotateGizmo(std::vector<Vertex>& outVertices, std::vector<uint16_t>& outIndices) {
+        static void generateRotateGizmo(std::vector<Vertex>& outVertices, std::vector<UIIndex>& outIndices) {
             outVertices.clear();
             outIndices.clear();
 
@@ -116,7 +116,7 @@ namespace slate {
                 glm::vec3 tangent = glm::normalize(glm::cross(axis, up));
                 glm::vec3 bitangent = glm::normalize(glm::cross(axis, tangent));
 
-                uint16_t baseIndex = static_cast<uint16_t>(outVertices.size());
+                uint16_t baseIndex = static_cast<UIIndex>(outVertices.size());
 
                 for (int i = 0; i <= ringSegments; ++i) {
                     float phi = (static_cast<float>(i) / ringSegments) * 2.0f * 3.14159265359f;

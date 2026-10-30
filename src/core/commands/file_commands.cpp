@@ -43,7 +43,7 @@ namespace slate {
         std::string ext = path.extension().string();
 
         std::vector<Vertex> loadedVertices;
-        std::vector<uint16_t> loadedIndices;
+        std::vector<UIIndex> loadedIndices;
 
         bool success = false;
 
@@ -95,6 +95,7 @@ namespace slate {
             );
 
             newMesh->setPath(m_filePath);
+            newMesh->setName(path.stem().string());
 
             // jolt rigid body creation
             if (context.physicsEngine) {

@@ -39,12 +39,21 @@ namespace slate {
         return true;
     }
 
+    float FontLoader::measureText(const std::string& text) const {
+        float w = 0.0f;
+        for (char c : text) {
+            const unsigned char u = static_cast<unsigned char>(c);
+            if (u >= 32 && u < 128) w += m_cdata[u - 32].xadvance;
+        }
+        return w;
+    }
+
     void FontLoader::generateTextGeometry(
         const std::string& text,
         glm::vec2 position,
         glm::vec4 color,
         std::vector<UIVertex>& outVertices,
-        std::vector<uint16_t>& outIndices
+        std::vector<UIIndex>& outIndices
     ) {
         float x = position.x;
         float y = position.y;
@@ -68,7 +77,7 @@ namespace slate {
 
             x = cx;
 
-            uint16_t baseIndex = static_cast<uint16_t>(outVertices.size());
+            uint16_t baseIndex = static_cast<UIIndex>(outVertices.size());
 
             outVertices.push_back(UIVertex{.pos = {q.x0, q.y0}, .color = color, .uv = {q.s0, q.t0}});
             outVertices.push_back(UIVertex{.pos = {q.x1, q.y0}, .color = color, .uv = {q.s1, q.t0}});

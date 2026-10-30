@@ -1,4 +1,5 @@
 #include "ui/ui_element.hpp"
+#include "ui/ui_draw.hpp"
 #include <SDL3/SDL_events.h>
 
 namespace slate {
@@ -18,43 +19,17 @@ namespace slate {
         return m_position;
     }
 
-    void UIElement::update(float deltaTime) {
-        for (auto& child : m_children) {
-            child->update(deltaTime);
-        }
+    void UIElement::markDirty() {
+        if (auto p = m_parent.lock()) p->markDirty();
+        else if (m_onDirty) m_onDirty();
     }
+    void UIElement::update(float dt)            { for (auto& c : m_children) if (c && c->m_visible) c->update(dt); }
 
-    void UIElement::onEvent(const SDL_Event& event) {
-        for (auto& child : m_children) {
-            child->onEvent(event);
-        }
-    }
+    void UIElement::onEvent(const SDL_Event& e) { for (auto& c : m_children) if (c && c->m_visible) c->onEvent(e); }
 
-    void UIElement::generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) {
-        if (!m_visible) return;
-
-        if (m_drawsBackground) {
-            glm::vec2 absPos = getAbsolutePosition();
-            uint16_t baseIndex = static_cast<uint16_t>(vertices.size());
-
-            vertices.push_back(UIVertex{.pos = absPos, .color = m_color, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = absPos + glm::vec2(m_size.x, 0.0f), .color = m_color, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = absPos + m_size, .color = m_color, .uv = glm::vec2(-1.0f)});
-            vertices.push_back(UIVertex{.pos = absPos + glm::vec2(0.0f, m_size.y), .color = m_color, .uv = glm::vec2(-1.0f)});
-
-            indices.push_back(baseIndex + 0);
-            indices.push_back(baseIndex + 1);
-            indices.push_back(baseIndex + 2);
-            indices.push_back(baseIndex + 0);
-            indices.push_back(baseIndex + 2);
-            indices.push_back(baseIndex + 3);
-        }
-
-        for (auto& child : m_children) {
-            if (child) {
-                child->generateGeometry(vertices, indices);
-            }
-        }
+    void UIElement::generateGeometry(std::vector<UIVertex>& v, std::vector<UIIndex>& i) {
+        if (!m_visible || !m_drawsBackground) return;
+        pushQuad(v, i, getAbsolutePosition(), m_size, m_color, m_cornerRadius);
     }
 
 }

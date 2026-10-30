@@ -1,4 +1,6 @@
 #include "ui_color_picker.hpp"
+#include <cctype>
+#include <cstdio>
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <iomanip>
@@ -57,6 +59,11 @@ namespace slate {
         return glm::vec3(r, g, b);
     }
 
+    static std::string toHex(const glm::vec4& c) {
+        auto b = [](float v) { return (unsigned)std::lround(std::clamp(v, 0.f, 1.f) * 255.f); };
+        char buf[8]; std::snprintf(buf, sizeof buf, "%02X%02X%02X", b(c.r), b(c.g), b(c.b)); return buf;
+    }
+
     void UIColorPicker::setColorValue(const glm::vec4& color) {
         m_color = color;
         m_hsv = rgbToHsv(glm::vec3(m_color.r, m_color.g, m_color.b));
@@ -89,11 +96,8 @@ namespace slate {
             }
         }
 
-        int hexVal = ((int)(std::clamp(m_color.r, 0.0f, 1.0f) * 255) << 16) |
-                     ((int)(std::clamp(m_color.g, 0.0f, 1.0f) * 255) << 8) |
-                      (int)(std::clamp(m_color.b, 0.0f, 1.0f) * 255);
         if (m_hexInputBox) {
-            m_hexInputBox->setValueWithoutCallback((float)hexVal);
+            m_hexInputBox->setTextWithoutCallback(toHex(m_color));
         }
     }
 
@@ -176,26 +180,27 @@ namespace slate {
         }
 
         // hex box
-        int initHex = ((int)(m_color.r * 255) << 16) | ((int)(m_color.g * 255) << 8) | (int)(m_color.b * 255);
         auto hexBox = std::make_shared<UIInputBox>(
             "HexInput",
             glm::vec2(8.0f, 246.0f),
             glm::vec2(popupWidth - 16.0f, 22.0f),
-            (float)initHex
+            toHex(m_color)
         );
         hexBox->setFontLoader(m_fontLoader);
-        hexBox->setDrawsBackground(true);
-        hexBox->setColor(glm::vec4(0.08f, 0.09f, 0.12f, 1.0f));
-
-        hexBox->setOnValueChanged([this](float val) {
-            int hexVal = static_cast<int>(val);
-            m_color.r = ((hexVal >> 16) & 0xFF) / 255.0f;
-            m_color.g = ((hexVal >> 8) & 0xFF) / 255.0f;
-            m_color.b = (hexVal & 0xFF) / 255.0f;
-
-            m_hsv = rgbToHsv(glm::vec3(m_color.r, m_color.g, m_color.b));
+        hexBox->setMaxLength(6);
+        hexBox->setCharFilter([](char c) {
+            return std::isxdigit(static_cast<unsigned char>(c)) != 0;
+        });
+        hexBox->setOnTextChanged([this](const std::string& s) {
+            if (s.size() == 6) {
+                unsigned v = (unsigned)std::stoul(s, nullptr, 16);
+                m_color.r = ((v >> 16) & 0xFF) / 255.0f;
+                m_color.g = ((v >> 8) & 0xFF) / 255.0f;
+                m_color.b = (v & 0xFF) / 255.0f;
+                m_hsv = rgbToHsv(glm::vec3(m_color));
+                if (m_onColorChanged) m_onColorChanged(m_color);
+            }
             updateInputBoxes();
-            if (m_onColorChanged) m_onColorChanged(m_color);
         });
 
         addChild(hexBox);
@@ -255,7 +260,7 @@ namespace slate {
         }
 
         if (event.type == SDL_EVENT_MOUSE_MOTION && m_isOpen) {
-            glm::vec2 mousePos(event.button.x, event.button.y);
+            glm::vec2 mousePos(event.motion.x, event.motion.y);
             glm::vec2 popupPos(absPos.x, absPos.y + m_size.y + 4.0f);
             float svWidth = m_size.x - 32.0f;
             float svHeight = 90.0f;
@@ -280,11 +285,11 @@ namespace slate {
         }
     }
 
-    void UIColorPicker::generateGeometry(std::vector<UIVertex>& vertices, std::vector<uint16_t>& indices) {
+    void UIColorPicker::generateGeometry(std::vector<UIVertex>& vertices, std::vector<UIIndex>& indices) {
         if (!m_visible) return;
 
         glm::vec2 absPos = getAbsolutePosition();
-        uint16_t idx = static_cast<uint16_t>(vertices.size());
+        uint16_t idx = static_cast<UIIndex>(vertices.size());
 
         vertices.push_back(UIVertex{.pos = absPos, .color = m_color, .uv = glm::vec2(-1.0f)});
         vertices.push_back(UIVertex{.pos = glm::vec2(absPos.x + m_size.x, absPos.y), .color = m_color, .uv = glm::vec2(-1.0f)});
@@ -299,7 +304,7 @@ namespace slate {
             glm::vec2 popupPos(absPos.x, absPos.y + m_size.y + 4.0f);
             glm::vec4 popupBgColor(0.06f, 0.07f, 0.10f, 1.0f);
 
-            uint16_t popIdx = static_cast<uint16_t>(vertices.size());
+            uint16_t popIdx = static_cast<UIIndex>(vertices.size());
             vertices.push_back(UIVertex{.pos = popupPos, .color = popupBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(popupPos.x + m_size.x, popupPos.y), .color = popupBgColor, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(popupPos.x + m_size.x, popupPos.y + popupHeight), .color = popupBgColor, .uv = glm::vec2(-1.0f)});
@@ -319,7 +324,7 @@ namespace slate {
             glm::vec4 cBL(0.0f, 0.0f, 0.0f, 1.0f);
             glm::vec4 cBR(0.0f, 0.0f, 0.0f, 1.0f);
 
-            uint16_t svIdx = static_cast<uint16_t>(vertices.size());
+            uint16_t svIdx = static_cast<UIIndex>(vertices.size());
             vertices.push_back(UIVertex{.pos = svPos, .color = cTL, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(svPos.x + svWidth, svPos.y), .color = cTR, .uv = glm::vec2(-1.0f)});
             vertices.push_back(UIVertex{.pos = glm::vec2(svPos.x + svWidth, svPos.y + svHeight), .color = cBR, .uv = glm::vec2(-1.0f)});
@@ -346,7 +351,7 @@ namespace slate {
                 float y1 = huePos.y + (s * stepHeight);
                 float y2 = y1 + stepHeight;
 
-                uint16_t hIdx = static_cast<uint16_t>(vertices.size());
+                uint16_t hIdx = static_cast<UIIndex>(vertices.size());
                 vertices.push_back(UIVertex{.pos = glm::vec2(huePos.x, y1), .color = colTop, .uv = glm::vec2(-1.0f)});
                 vertices.push_back(UIVertex{.pos = glm::vec2(huePos.x + hueWidth, y1), .color = colTop, .uv = glm::vec2(-1.0f)});
                 vertices.push_back(UIVertex{.pos = glm::vec2(huePos.x + hueWidth, y2), .color = colBot, .uv = glm::vec2(-1.0f)});
@@ -360,12 +365,6 @@ namespace slate {
                 m_fontLoader->generateTextGeometry("RGB", glm::vec2(popupPos.x + 8.0f, popupPos.y + 116.0f), glm::vec4(0.7f, 0.7f, 0.75f, 1.0f), vertices, indices);
                 m_fontLoader->generateTextGeometry("CMYK", glm::vec2(popupPos.x + 8.0f, popupPos.y + 164.0f), glm::vec4(0.7f, 0.7f, 0.75f, 1.0f), vertices, indices);
                 m_fontLoader->generateTextGeometry("HEX", glm::vec2(popupPos.x + 8.0f, popupPos.y + 212.0f), glm::vec4(0.7f, 0.7f, 0.75f, 1.0f), vertices, indices);
-            }
-
-            for (auto& child : m_children) {
-                if (child) {
-                    child->generateGeometry(vertices, indices);
-                }
             }
         }
     }

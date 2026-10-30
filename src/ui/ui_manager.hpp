@@ -22,7 +22,7 @@ namespace slate {
         void setScreenSize(float width, float height);
 
         // tree
-        void setRootElement(std::shared_ptr<UIElement> root) { m_rootElement = root; }
+        void setRootElement(std::shared_ptr<UIElement> root);
         std::shared_ptr<UIElement> getRootElement() const { return m_rootElement; }
 
         // batching
@@ -30,7 +30,7 @@ namespace slate {
         void markDirty() { m_isDirty = true; }
 
         const std::vector<UIVertex>& getVertexBuffer() const { return m_vertices; }
-        const std::vector<uint16_t>& getIndexBuffer() const { return m_indices; }
+        const std::vector<UIIndex>& getIndexBuffer() const { return m_indices; }
 
         void rebuildGeometry();
 
@@ -57,7 +57,7 @@ namespace slate {
 
         bool m_isDirty{true};
         std::vector<UIVertex> m_vertices;
-        std::vector<uint16_t> m_indices;
+        std::vector<UIIndex> m_indices;
 
         FontLoader m_fontLoader;
 

@@ -106,6 +106,8 @@ add_executable(slate
         src/resources/texture_loader.hpp
         src/renderer/light.hpp
         src/renderer/shadow.hpp
+        src/ui/ui_draw.hpp
+        src/ui/ui_theme.hpp
 )
 
 foreach(SHADER_FILE ${SHADER_SOURCES})
