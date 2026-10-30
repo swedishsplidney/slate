@@ -1,0 +1,152 @@
+name: build and release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: build and package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+            asset_name: slate-linux-x86_64.AppImage
+          - os: windows-latest
+            name: windows
+            asset_name: slate-windows-x86_64.zip
+          - os: macos-latest
+            name: macos
+            asset_name: slate-macos-universal.dmg
+
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # setup vulkan
+      - name: setup vulkan
+        uses: VulkanSDK/setup-vulkan-sdk@v3
+        with:
+          vulkan-version: '1.3.290.0'
+
+      # dependencies
+      - name: install linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl3-dev libglm-dev cmake build-essential xorg-dev wget libfuse2
+
+      - name: install windows dependencies
+        if: runner.os == 'Windows'
+        run: |
+          vcpkg install sdl3:x64-windows glm:x64-windows
+
+      - name: install mac dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install sdl3 glm create-dmg
+
+      # configure cmake
+      - name: configure cmake (unix)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: configure cmake (windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Release
+
+      # build
+      - name: build binaries
+        run: |
+          cmake --build build --config Release -j 4
+
+      # package
+      - name: package linux appimage
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist_pkg/usr/bin dist_pkg/usr/share/applications dist_pkg/usr/share/icons/hicolor/512x512/apps
+          
+          cp build/slate dist_pkg/usr/bin/
+          cp -r build/assets dist_pkg/usr/bin/
+          cp -r build/models dist_pkg/usr/bin/
+          
+          cat << 'EOF' > dist_pkg/slate.desktop
+          [Desktop Entry]
+          Type=Application
+          Name=Slate Engine
+          Exec=slate
+          Icon=slate
+          Categories=Development;Graphics;
+          EOF
+          
+          cp assets/slate_icon.png dist_pkg/usr/share/icons/hicolor/512x512/apps/slate.png
+          cp dist_pkg/slate.desktop dist_pkg/
+          
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          
+          export OUTPUT=slate-linux-x86_64.AppImage
+          ./linuxdeploy-x86_64.AppImage --appdir dist_pkg --output appimage
+          mkdir -p dist
+          mv slate-linux-x86_64.AppImage dist/
+
+      - name: package windows zip
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p dist/slate-windows
+          cp build/Release/slate.exe dist/slate-windows/
+          
+
+          xcopy /E /I build/assets dist\slate-windows\assets
+          xcopy /E /I build/models dist\slate-windows\models
+          
+          if exist "vcpkg_installed\x64-windows\bin\SDL3.dll" (
+            cp vcpkg_installed\x64-windows\bin\SDL3.dll dist\slate-windows/
+          )
+          
+          cd dist
+          7z a slate-windows-x86_64.zip slate-windows
+          cd ..
+
+      - name: package macOS dmg
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist_dmg/SlateEngine.app/Contents/MacOS
+          mkdir -p dist_dmg/SlateEngine.app/Contents/Resources
+          
+          cp build/slate dist_dmg/SlateEngine.app/Contents/MacOS/slate
+          cp -r build/assets dist_dmg/SlateEngine.app/Contents/MacOS/
+          cp -r build/models dist_dmg/SlateEngine.app/Contents/MacOS/
+          
+          create-dmg \
+            --volname "Slate Engine Installer" \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "SlateEngine.app" 175 120 \
+            --hide-extension "SlateEngine.app" \
+            --app-drop-link 425 120 \
+            dist/slate-macos-universal.dmg \
+            dist_dmg/
+
+      # publish
+      - name: upload release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.AppImage
+            dist/*.zip
+            dist/*.dmg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
