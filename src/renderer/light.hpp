@@ -16,8 +16,7 @@ namespace slate {
 
         // sun
         glm::vec3 sunDirection = glm::normalize(glm::vec3(1.0f, 2.0f, 1.5f));
-        float sunOrthoHalfExtent = 24.0f;
-        float sunShadowDepthMultiplier = 6.0f;
+        float sunAngularDiameterDegrees = 1.5f;
 
         // point / area
         glm::vec3 position{0.0f, 8.0f, 0.0f};
@@ -27,8 +26,9 @@ namespace slate {
 
         // shared
         glm::vec3 color{1.0f, 0.95f, 0.9f};
-        float intensity = 300.0f;
+        float intensity = 3.0f;
         float shadowSoftness = 1.0f;
+        bool castShadows = true;
     };
 
     constexpr uint32_t MAX_DYNAMIC_LIGHTS = 16;

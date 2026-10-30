@@ -50,7 +50,6 @@ namespace slate {
         void setModelMatrix(const glm::mat4& matrix, bool updatePhysics = true) {
             m_modelMatrix = matrix;
 
-            // cache scale
             glm::vec3 translation, skew;
             glm::quat orientation;
             glm::vec4 perspective;
@@ -78,6 +77,19 @@ namespace slate {
 
         glm::vec3 getGeometricCenter() const { return m_geometricCenter; }
         glm::vec3 getScale() const { return m_scale; }
+
+        const glm::vec3& getBoundsMin() const { return m_boundsMin; }
+        const glm::vec3& getBoundsMax() const { return m_boundsMax; }
+
+        void getWorldBoundingSphere(glm::vec3& outCenter, float& outRadius) const {
+            const glm::vec4 c = m_modelMatrix * glm::vec4(m_geometricCenter, 1.0f);
+            outCenter = glm::vec3(c);
+
+            const float maxScale = glm::max(glm::length(glm::vec3(m_modelMatrix[0])),
+                                   glm::max(glm::length(glm::vec3(m_modelMatrix[1])),
+                                            glm::length(glm::vec3(m_modelMatrix[2]))));
+            outRadius = 0.5f * glm::length(m_boundsMax - m_boundsMin) * maxScale;
+        }
 
         const std::vector<Vertex>& getVertices() const { return m_vertices; }
         const std::vector<uint16_t>& getIndices() const { return m_indices; }
@@ -147,6 +159,8 @@ namespace slate {
         glm::mat4 m_modelMatrix{1.0f};
         glm::vec3 m_scale{1.0f};
         glm::vec3 m_geometricCenter{0.0f};
+        glm::vec3 m_boundsMin{0.0f};
+        glm::vec3 m_boundsMax{0.0f};
 
         std::vector<Vertex> m_vertices;
         std::vector<uint16_t> m_indices;
@@ -158,7 +172,7 @@ namespace slate {
             if (m_physicsSystem && !m_bodyID.IsInvalid()) {
                 auto& bodyInterface = m_physicsSystem->GetBodyInterface();
 
-                // decompose in a way that does not cause explosions (sigtrap errors)
+                // decompose in a way that does not cause explosions
                 glm::vec3 scale, translation, skew;
                 glm::quat orientation;
                 glm::vec4 perspective;

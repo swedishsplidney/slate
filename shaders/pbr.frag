@@ -5,7 +5,6 @@ layout(location = 1) in vec3 fragColor;
 layout(location = 2) in vec3 fragNormal;
 layout(location = 3) in vec2 fragTexCoord;
 layout(location = 4) flat in uint fragMaterialIndex;
-layout(location = 5) in vec4 fragPosLightSpace;
 
 layout(location = 0) out vec4 outColor;
 
@@ -54,11 +53,23 @@ layout(std140, set = 0, binding = 0) uniform GlobalUBO {
 
     vec4  ambientCube[6];
     mat4  lightSpaceMatrix;
+
+    mat4  shadowMatrices[6];
+    vec4  cameraForward;
+    vec4  cascadeSplits;
+    vec4  cascadeTexelWorld;
+    vec4  cascadeDepthRange;
+    vec4  shadowParams0;
+    vec4  shadowParams1;
+    vec4  shadowParams2;
+    vec4  shadowParams3;
+    vec4  shadowParams4;
 } ubo;
 
 layout(set = 0, binding = 1) uniform sampler2D sceneColorTexture;
 layout(set = 0, binding = 2) uniform sampler2D detailNormalMap;
-layout(set = 0, binding = 3) uniform sampler2DShadow shadowMap;
+layout(set = 0, binding = 3) uniform sampler2DArrayShadow shadowMaps;
+layout(set = 0, binding = 5) uniform sampler2DArray shadowDepths;
 layout(set = 1, binding = 1) uniform sampler2D albedoMap;
 layout(set = 1, binding = 2) uniform sampler2D normalMap;
 layout(set = 1, binding = 3) uniform sampler2D ormMap;
@@ -210,47 +221,190 @@ vec2 windowedAttenuation(float dist, float range) {
     return vec2(attenuation, windowed);
 }
 
-float calculateShadow(vec4 fragPosLightSpace, float NdotL, vec2 fragCoord, float rangeFade) {
-    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+const float TAU = 6.28318530718;
+const float GOLDEN_ANGLE = 2.39996323;
 
-    vec2 centerDist = abs(projCoords.xy - 0.5) * 2.0;
-    float angularFade = 1.0 - smoothstep(0.75, 1.0, max(centerDist.x, centerDist.y));
-    float edgeFade = angularFade * clamp(rangeFade, 0.0, 1.0);
+vec2 vogelDisk(int i, int n, float phi) {
+    float r = sqrt((float(i) + 0.5) / float(n));
+    float theta = float(i) * GOLDEN_ANGLE + phi;
+    return r * vec2(cos(theta), sin(theta));
+}
 
-    if (edgeFade <= 0.001 || projCoords.z < 0.0 || projCoords.z > 1.0) {
+int selectCascade(float viewDepth) {
+    int count = int(ubo.shadowParams0.y);
+    int cascade = count - 1;
+    for (int i = 0; i < count - 1; ++i) {
+        if (viewDepth < ubo.cascadeSplits[i]) {
+            cascade = i;
+            break;
+        }
+    }
+    return cascade;
+}
+
+vec2 receiverPlaneGradient(int c, vec3 Ng, float texelWorld, float depthRange) {
+    mat4 M = ubo.shadowMatrices[c];
+    float halfExtent = texelWorld * ubo.shadowParams3.w * 0.5;
+    vec3 axisRight = vec3(M[0][0], M[1][0], M[2][0]) * halfExtent;
+    vec3 axisUp    = vec3(M[0][1], M[1][1], M[2][1]) * halfExtent;
+    float NdotL = max(dot(Ng, ubo.lightDirection), 0.1);
+    float k = 2.0 * halfExtent / (depthRange * NdotL);
+    return vec2(dot(Ng, axisRight), dot(Ng, axisUp)) * k;
+}
+
+float sampleCascade(int c, vec3 worldPos, vec3 Ng, float noiseAngle) {
+    float texelWorld = ubo.cascadeTexelWorld[c];
+    float depthRange = ubo.cascadeDepthRange[c];
+
+    float NdotLg = clamp(dot(Ng, ubo.lightDirection), 0.0, 1.0);
+    float sinTheta = sqrt(1.0 - NdotLg * NdotLg);
+    vec3 biasedPos = worldPos + Ng * (texelWorld * ubo.shadowParams2.x * sinTheta);
+
+    vec3 proj = (ubo.shadowMatrices[c] * vec4(biasedPos, 1.0)).xyz;
+    vec2 uv = proj.xy * 0.5 + 0.5;
+    float zRef = proj.z - (texelWorld * ubo.shadowParams2.y) / depthRange;
+
+    if (proj.z < 0.0 || proj.z > 1.0 || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) {
         return 1.0;
     }
 
-    float bias = max(0.0008 * (1.0 - NdotL), 0.00015);
-    projCoords.z -= bias;
+    int pcfTaps = max(int(ubo.shadowParams1.x), 1);
+    int blockerTaps = int(ubo.shadowParams1.y);
+    float maxRadius = ubo.shadowParams1.z;
+    float softness = ubo.shadowParams2.z;
+    float penumbraScale = ubo.shadowParams2.w;
+    float uvTexel = 1.0 / ubo.shadowParams3.w;
 
-    float noise = interleavedGradientNoise(fragCoord) * 6.2831853;
-    float c = cos(noise);
-    float s = sin(noise);
-    mat2 rot = mat2(c, -s, s, c);
+    vec2 slope = receiverPlaneGradient(c, Ng, texelWorld, depthRange);
 
-    // 4-tap rotated Poisson disk
-    float softness = max(ubo.lightParams.x, 0.1) * mix(2.5, 1.0, edgeFade);
-    float shadow = 0.0;
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+    float radius = clamp(1.5 * softness, 1.0, maxRadius);
 
-    vec2 offsets[4] = vec2[](
-            vec2(-0.94,  0.33),
-            vec2( 0.33,  0.94),
-            vec2(-0.33, -0.94),
-            vec2( 0.94, -0.33)
-    );
+    if (blockerTaps > 0) {
+        float blockerSum = 0.0;
+        float blockerCount = 0.0;
+        for (int i = 0; i < blockerTaps; ++i) {
+            vec2 offsetUV = vogelDisk(i, blockerTaps, noiseAngle) * maxRadius * uvTexel;
+            float d = textureLod(shadowDepths, vec3(uv + offsetUV, float(c)), 0.0).r;
+            if (d < zRef + dot(slope, offsetUV)) {
+                blockerSum += d;
+                blockerCount += 1.0;
+            }
+        }
+        if (blockerCount < 0.5) {
+            return 1.0;
+        }
 
-    for (int i = 0; i < 4; ++i) {
-        vec2 rotatedOffset = rot * offsets[i] * texelSize * 2.0 * softness;
-        vec3 sampleCoords = projCoords;
-        sampleCoords.xy += rotatedOffset;
-        shadow += texture(shadowMap, sampleCoords);
+        float avgBlocker = blockerSum / blockerCount;
+        float penumbraWorld = max(zRef - avgBlocker, 0.0) * depthRange * penumbraScale;
+        radius = clamp(0.5 * penumbraWorld / texelWorld, 1.0, maxRadius);
     }
-    shadow /= 4.0;
 
-    return mix(1.0, shadow, edgeFade);
+    float lit = 0.0;
+    for (int i = 0; i < pcfTaps; ++i) {
+        vec2 offsetUV = vogelDisk(i, pcfTaps, noiseAngle) * radius * uvTexel;
+        lit += texture(shadowMaps, vec4(uv + offsetUV, float(c), zRef + dot(slope, offsetUV)));
+    }
+    return lit / float(pcfTaps);
+}
+
+float calculateSunShadow(vec3 worldPos, vec3 Ng, float noiseAngle) {
+    int count = int(ubo.shadowParams0.y);
+    float maxDist = ubo.shadowParams0.z;
+    float viewDepth = dot(worldPos - ubo.cameraPos, ubo.cameraForward.xyz);
+    if (viewDepth >= maxDist) {
+        return 1.0;
+    }
+
+    int cascade = selectCascade(viewDepth);
+    float split = ubo.cascadeSplits[cascade];
+    float shadow = sampleCascade(cascade, worldPos, Ng, noiseAngle);
+
+    if (cascade < count - 1) {
+        float prevSplit = cascade > 0 ? ubo.cascadeSplits[cascade - 1] : 0.0;
+        float band = ubo.shadowParams1.w * (split - prevSplit);
+        if (band > 0.0001) {
+            float t = smoothstep(split - band, split, viewDepth);
+            if (t > 0.0) {
+                shadow = mix(shadow, sampleCascade(cascade + 1, worldPos, Ng, noiseAngle), t);
+            }
+        }
+    }
+
+    float fade = smoothstep(ubo.shadowParams0.w, maxDist, viewDepth);
+    return mix(shadow, 1.0, fade);
+}
+
+float calculateLocalShadow(vec3 worldPos, vec3 Ng, vec3 L, float rangeFade, float noiseAngle) {
+    if (rangeFade <= 0.001) {
+        return 1.0;
+    }
+
+    vec3 toFrag = worldPos - ubo.lightPos;
+    int layer = 0;
+    float axisDepth;
+    if (ubo.lightType == 1) {
+        vec3 a = abs(toFrag);
+        if (a.x >= a.y && a.x >= a.z) {
+            layer = toFrag.x > 0.0 ? 0 : 1;
+            axisDepth = a.x;
+        } else if (a.y >= a.z) {
+            layer = toFrag.y > 0.0 ? 2 : 3;
+            axisDepth = a.y;
+        } else {
+            layer = toFrag.z > 0.0 ? 4 : 5;
+            axisDepth = a.z;
+        }
+    } else {
+        axisDepth = dot(toFrag, ubo.lightDirection);
+    }
+    if (axisDepth <= 0.0) {
+        return 1.0;
+    }
+
+    float nearP = ubo.shadowParams3.x;
+    float farP = ubo.shadowParams3.y;
+    float texelWorld = axisDepth * ubo.shadowParams3.z;
+
+    float NdotLg = clamp(dot(Ng, L), 0.0, 1.0);
+    float sinTheta = sqrt(1.0 - NdotLg * NdotLg);
+    float tanTheta = min(sinTheta / max(NdotLg, 0.1), 4.0);
+
+    vec3 biasedPos = worldPos + Ng * (texelWorld * ubo.shadowParams2.x * sinTheta);
+    vec4 clip = ubo.shadowMatrices[layer] * vec4(biasedPos, 1.0);
+    if (clip.w <= 0.0) {
+        return 1.0;
+    }
+    vec3 proj = clip.xyz / clip.w;
+    vec2 uv = proj.xy * 0.5 + 0.5;
+
+    float radius = clamp(1.5 * ubo.shadowParams2.z, 1.0, ubo.shadowParams1.z);
+
+    float biasTexels = ubo.shadowParams2.y + radius * tanTheta;
+    float dzdd = (farP * nearP) / (axisDepth * axisDepth * (farP - nearP));
+    float zRef = proj.z - texelWorld * biasTexels * dzdd;
+
+    if (proj.z <= 0.0 || proj.z >= 1.0) {
+        return 1.0;
+    }
+
+    float edgeFade = 1.0;
+    if (ubo.lightType == 2) {
+        vec2 centerDist = abs(proj.xy);
+        edgeFade = 1.0 - smoothstep(0.75, 1.0, max(centerDist.x, centerDist.y));
+    }
+    float fade = clamp(rangeFade * edgeFade, 0.0, 1.0);
+    if (fade <= 0.001) {
+        return 1.0;
+    }
+
+    int pcfTaps = max(int(ubo.shadowParams1.x), 1);
+    float uvTexel = 1.0 / ubo.shadowParams3.w;
+    float lit = 0.0;
+    for (int i = 0; i < pcfTaps; ++i) {
+        vec2 offsetUV = vogelDisk(i, pcfTaps, noiseAngle) * radius * uvTexel;
+        lit += texture(shadowMaps, vec4(uv + offsetUV, float(layer), zRef));
+    }
+    return mix(1.0, lit / float(pcfTaps), fade);
 }
 
 void main() {
@@ -343,7 +497,15 @@ void main() {
     float NdotL = max(dot(N, L), 0.0);
     vec3 mainSpecular;
     vec3 brdfTerm = evaluateDirectBRDF(N, V, L, NdotV, albedo, F0, effectiveRoughness, metallic, mainSpecular);
-    float shadow = calculateShadow(fragPosLightSpace, NdotL, gl_FragCoord.xy, shadowRangeFade);
+    float shadow = 1.0;
+    if (ubo.shadowParams0.x > 0.5 && (NdotL > 0.0 || dot(N_base, L) > 0.0)) {
+        float noiseAngle = interleavedGradientNoise(gl_FragCoord.xy) * TAU;
+        if (ubo.lightType == 0) {
+            shadow = calculateSunShadow(fragPosWorld, N_base, noiseAngle);
+        } else {
+            shadow = calculateLocalShadow(fragPosWorld, N_base, L, shadowRangeFade, noiseAngle);
+        }
+    }
     vec3 directLight = shadow * brdfTerm * lightColor;
 
     // dynamic
@@ -412,6 +574,17 @@ void main() {
 
             vec3 transmittedLight = backgroundScene * albedo * (vec3(1.0) - F_env);
             color = mix(color, transmittedLight + glassSpecular + emissive, transmission);
+        }
+    }
+
+    if (ubo.shadowParams4.x > 0.5 && ubo.lightType == 0) {
+        float debugDepth = dot(fragPosWorld - ubo.cameraPos, ubo.cameraForward.xyz);
+        if (debugDepth >= ubo.shadowParams0.z) {
+            color *= vec3(0.6);
+        } else {
+            const vec3 cascadeTint[4] = vec3[](vec3(1.0, 0.35, 0.35), vec3(0.35, 1.0, 0.35),
+                    vec3(0.35, 0.5, 1.0), vec3(1.0, 1.0, 0.3));
+            color *= cascadeTint[selectCascade(debugDepth)];
         }
     }
 

@@ -57,6 +57,8 @@ namespace slate {
             maxBounds = glm::max(maxBounds, v.pos);
         }
         m_geometricCenter = (minBounds + maxBounds) * 0.5f;
+        m_boundsMin = minBounds;
+        m_boundsMax = maxBounds;
 
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 

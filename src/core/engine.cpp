@@ -898,6 +898,29 @@ void Engine::mainLoop() {
             }
       }
 
+      // f6, f7, f8 shadow debug shortcuts
+      if (event.type == SDL_EVENT_KEY_DOWN && event.key.repeat == 0 &&
+          !(event.key.mod & SDL_KMOD_CTRL) && m_renderer) {
+        auto *vkRenderer = static_cast<VulkanRenderer *>(m_renderer.get());
+        ShadowSettings &shadowSettings = vkRenderer->getShadowSettings();
+
+        if (event.key.scancode == SDL_SCANCODE_F6) {
+          shadowSettings.debugCascades = !shadowSettings.debugCascades;
+          std::cout << "[shadows] cascade debug view: "
+                    << (shadowSettings.debugCascades ? "on" : "off") << "\n";
+        }
+        if (event.key.scancode == SDL_SCANCODE_F7) {
+          static const char *names[] = {"low", "medium", "high", "ultra"};
+          int next = (static_cast<int>(shadowSettings.quality) + 1) % 4;
+          shadowSettings.quality = static_cast<ShadowQuality>(next);
+          std::cout << "[shadows] quality: " << names[next] << "\n";
+        }
+        if (event.key.scancode == SDL_SCANCODE_F8) {
+          shadowSettings.enabled = !shadowSettings.enabled;
+          std::cout << "[shadows] " << (shadowSettings.enabled ? "enabled" : "disabled") << "\n";
+        }
+      }
+
       // capture mouse position and viewport bounds on press
       if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         float mx = static_cast<float>(event.button.x);

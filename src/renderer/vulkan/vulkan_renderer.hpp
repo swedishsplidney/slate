@@ -1,10 +1,13 @@
 #pragma once
 
 #include <memory>
+#include <array>
+#include <cstddef>
 
 #include "renderer/renderer.hpp"
 #include "renderer/mesh.hpp"
 #include "renderer/light.hpp"
+#include "renderer/shadow.hpp"
 #include "ui/ui_vertex.hpp"
 #include "ui/ui_element.hpp"
 #include "resources/mesh_loader.hpp"
@@ -42,8 +45,27 @@ namespace slate {
 
         glm::vec4 ambientCube[6]{};
         glm::mat4 lightSpaceMatrix;
+
+        glm::mat4 shadowMatrices[6];
+        glm::vec4 cameraForward;
+        glm::vec4 cascadeSplits;
+        glm::vec4 cascadeTexelWorld;
+        glm::vec4 cascadeDepthRange;
+        glm::vec4 shadowParams0;
+        glm::vec4 shadowParams1;
+        glm::vec4 shadowParams2;
+        glm::vec4 shadowParams3;
+        glm::vec4 shadowParams4;
     };
-    static_assert(sizeof(GlobalUBO) == 240, "GlobalUBO must match pbr.frag std140 layout");
+    static_assert(offsetof(GlobalUBO, lightSpaceMatrix) + sizeof(glm::mat4) == 240, "GlobalUBO prefix must not move");
+    static_assert(sizeof(GlobalUBO) == 768, "GlobalUBO must match the std140 layout in pbr.frag / shadow.vert");
+
+    struct ShadowPushConstants {
+        glm::mat4 modelMatrix;
+        uint32_t materialId;
+        uint32_t layer;
+    };
+    static_assert(sizeof(ShadowPushConstants) <= 128, "shadow push constants exceed the guaranteed minimum limit");
 
     struct UniformBufferObject {
         alignas(16) glm::mat4 view;
@@ -132,6 +154,16 @@ namespace slate {
             m_viewportSize = size;
         }
 
+        ShadowSettings& getShadowSettings() { return m_shadowSettings; }
+        const ShadowSettings& getShadowSettings() const { return m_shadowSettings; }
+        void setShadowSettings(const ShadowSettings& settings) { m_shadowSettings = settings; }
+
+        void setCameraProjection(float fovYDegrees, float nearPlane, float farPlane) {
+            m_cameraFovY = glm::radians(fovYDegrees);
+            m_cameraNear = nearPlane;
+            m_cameraFar = farPlane;
+        }
+
         void setLight(const SceneLight& light) { m_sceneLight = light; }
         SceneLight& getLight() { return m_sceneLight; }
         const SceneLight& getLight() const { return m_sceneLight; }
@@ -167,6 +199,9 @@ namespace slate {
         void createShadowRenderPass();
         void createShadowFramebuffer();
         void createShadowPipeline();
+        void destroyShadowResources();
+        void recreateShadowResources();
+        void recordShadowPasses(VkCommandBuffer commandBuffer);
 
         SDL_Window* m_window{nullptr};
         VkInstance m_instance{VK_NULL_HANDLE};
@@ -194,13 +229,25 @@ namespace slate {
         VkPipeline m_graphicsPipeline{VK_NULL_HANDLE};
         VkPipeline m_transparentPipeline{VK_NULL_HANDLE};
 
-        glm::mat4 m_lightViewProj{1.0f};
+        ShadowSettings m_shadowSettings;
+        uint32_t m_shadowResolution{0};
+        bool m_shadowActive{false};
+        uint32_t m_shadowLayerCount{0};
+        std::array<glm::mat4, SHADOW_MAP_LAYERS> m_shadowLayerMatrices{};
+        std::vector<glm::vec4> m_shadowCasterSpheres;
+
+        float m_cameraFovY{glm::radians(45.0f)};
+        float m_cameraNear{0.001f};
+        float m_cameraFar{1000.0f};
+
         VkRenderPass m_shadowRenderPass{VK_NULL_HANDLE};
-        VkFramebuffer m_shadowFramebuffer{VK_NULL_HANDLE};
+        std::array<VkFramebuffer, SHADOW_MAP_LAYERS> m_shadowFramebuffers{};
+        std::array<VkImageView, SHADOW_MAP_LAYERS> m_shadowLayerViews{};
         VkImage m_shadowMapImage{VK_NULL_HANDLE};
         VkDeviceMemory m_shadowMapImageMemory{VK_NULL_HANDLE};
         VkImageView m_shadowMapImageView{VK_NULL_HANDLE};
         VkSampler m_shadowMapSampler{VK_NULL_HANDLE};
+        VkSampler m_shadowDepthSampler{VK_NULL_HANDLE};
         VkPipeline m_shadowPipeline{VK_NULL_HANDLE};
         VkPipelineLayout m_shadowPipelineLayout{VK_NULL_HANDLE};
 
@@ -230,7 +277,7 @@ namespace slate {
         void createImage(uint32_t width, uint32_t height, VkFormat format,
                          VkImageTiling tiling, VkImageUsageFlags usage,
                          VkMemoryPropertyFlags properties, VkImage& image,
-                         VkDeviceMemory& imageMemory);
+                         VkDeviceMemory& imageMemory, uint32_t arrayLayers = 1);
         VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
         uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
@@ -246,7 +293,7 @@ namespace slate {
 
         void createUniformBuffers();
         void createDescriptorPoolAndSets();
-        void updateUniformBuffer(const glm::vec3& cameraPos);
+        void updateUniformBuffer(const glm::vec3& cameraPos, const glm::mat4& viewMatrix, float aspect);
 
         std::vector<VkBuffer> m_uniformBuffers;
         std::vector<VkDeviceMemory> m_uniformBuffersMemory;

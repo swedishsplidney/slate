@@ -25,8 +25,6 @@
 
 namespace slate {
 
-    static constexpr uint32_t SHADOW_MAP_SIZE = 4096;
-
     VulkanRenderer::VulkanRenderer(SDL_Window* window) : m_window(window) {}
 
     VulkanRenderer::~VulkanRenderer() {
@@ -438,7 +436,7 @@ namespace slate {
         uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VkMemoryPropertyFlags properties, VkImage& image,
-        VkDeviceMemory& imageMemory
+        VkDeviceMemory& imageMemory, uint32_t arrayLayers
     ) {
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -447,7 +445,7 @@ namespace slate {
         imageInfo.extent.height = height;
         imageInfo.extent.depth = 1;
         imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
+        imageInfo.arrayLayers = arrayLayers;
         imageInfo.format = format;
         imageInfo.tiling = tiling;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -647,7 +645,7 @@ namespace slate {
 
         dependencies[1].srcSubpass = 0;
         dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         dependencies[1].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
         dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -713,17 +711,19 @@ namespace slate {
     }
 
     void VulkanRenderer::createShadowFramebuffer() {
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = m_shadowRenderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = &m_shadowMapImageView;
-        framebufferInfo.width = SHADOW_MAP_SIZE;
-        framebufferInfo.height = SHADOW_MAP_SIZE;
-        framebufferInfo.layers = 1;
+        for (uint32_t layer = 0; layer < SHADOW_MAP_LAYERS; ++layer) {
+            VkFramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = m_shadowRenderPass;
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments = &m_shadowLayerViews[layer];
+            framebufferInfo.width = m_shadowResolution;
+            framebufferInfo.height = m_shadowResolution;
+            framebufferInfo.layers = 1;
 
-        if (vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &m_shadowFramebuffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create shadow framebuffer!");
+            if (vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &m_shadowFramebuffers[layer]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create shadow framebuffer!");
+            }
         }
     }
 
@@ -769,7 +769,7 @@ namespace slate {
         }
     }
 
-    void VulkanRenderer::updateUniformBuffer(const glm::vec3& cameraPos) {
+    void VulkanRenderer::updateUniformBuffer(const glm::vec3& cameraPos, const glm::mat4& viewMatrix, float aspect) {
         GlobalUBO ubo{};
 
         ubo.cameraPos = cameraPos;
@@ -787,53 +787,84 @@ namespace slate {
         ubo.lightColor = light.color;
         ubo.lightIntensity = light.intensity;
 
-        glm::mat4 lightView(1.0f);
-        glm::mat4 lightProj(1.0f);
-        float shadowNormalBias;
+        ShadowSettings settings = sanitizeShadowSettings(m_shadowSettings);
+        settings.resolution = m_shadowResolution;
+        const ShadowQualityPreset preset = getShadowQualityPreset(settings.quality);
+        const float softness = std::max(light.shadowSoftness, 0.1f);
+
+        m_shadowActive = settings.enabled && light.castShadows;
+        m_shadowLayerCount = 0;
+
+        const glm::mat4 invView = glm::inverse(viewMatrix);
+        const glm::vec3 camForward = glm::normalize(-glm::vec3(invView[2]));
+        ubo.cameraForward = glm::vec4(camForward, 0.0f);
+
+        for (auto& m : ubo.shadowMatrices) m = glm::mat4(1.0f);
+
+        uint32_t cascadeCount = 1;
+        bool contactHardening = false;
+        float penumbraScale = 0.0f;
+        float localNear = 0.1f, localFar = 1.0f, localTexelPerDist = 0.0f;
 
         if (light.type == LightType::Sun) {
-            // sun
-            glm::vec3 sunDir = glm::length(light.sunDirection) > 0.0001f ? glm::normalize(light.sunDirection) : glm::vec3(0.0f, 1.0f, 0.0f);
-
-            const float shadowExtent = std::max(light.sunOrthoHalfExtent, 0.1f);
-            const float shadowDepthRange = shadowExtent * std::max(light.sunShadowDepthMultiplier, 1.0f);
-            glm::vec3 shadowCenter = cameraPos;
-            glm::vec3 upHint = (std::abs(sunDir.y) > 0.99f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
-            glm::vec3 lightEye = shadowCenter + sunDir * (shadowDepthRange * 0.5f);
-
-            lightView = glm::lookAt(lightEye, shadowCenter, upHint);
-            lightProj = glm::orthoRH_ZO(-shadowExtent, shadowExtent, -shadowExtent, shadowExtent, 0.1f, shadowDepthRange);
-
+            const glm::vec3 sunDir = glm::length(light.sunDirection) > 0.0001f ? glm::normalize(light.sunDirection)
+                                                                               : glm::vec3(0.0f, 1.0f, 0.0f);
             ubo.lightDirection = sunDir;
-            ubo.lightPos = lightEye;
-            ubo.lightRange = shadowDepthRange;
+            ubo.lightPos = cameraPos;
+            ubo.lightRange = settings.maxDistance;
 
-            float texelWorldSize = (2.0f * shadowExtent) / static_cast<float>(SHADOW_MAP_SIZE);
-            shadowNormalBias = texelWorldSize * 1.5f;
+            if (m_shadowActive) {
+                const float guardTexels = std::ceil(preset.maxFilterTexels) + 2.0f;
+                const CascadeData cascades = computeSunCascades(cameraPos, camForward, m_cameraFovY, aspect, m_cameraNear,
+                                                                sunDir, settings, guardTexels);
+                cascadeCount = cascades.count;
+                m_shadowLayerCount = cascades.count;
+
+                for (uint32_t i = 0; i < MAX_SHADOW_CASCADES; ++i) {
+                    ubo.shadowMatrices[i] = cascades.viewProj[i];
+                    ubo.cascadeSplits[i] = cascades.splitFar[i];
+                    ubo.cascadeTexelWorld[i] = cascades.texelWorld[i];
+                    ubo.cascadeDepthRange[i] = cascades.depthRange[i];
+                    if (i < cascades.count) m_shadowLayerMatrices[i] = cascades.viewProj[i];
+                }
+
+                contactHardening = settings.contactHardening && preset.blockerTaps > 0;
+                penumbraScale = 2.0f * std::tan(0.5f * glm::radians(std::clamp(light.sunAngularDiameterDegrees, 0.0f, 30.0f))) * softness;
+            }
         } else {
-            // point / area
-            glm::vec3 aimDir = glm::length(light.aimDirection) > 0.0001f ? glm::normalize(light.aimDirection) : glm::vec3(0.0f, -1.0f, 0.0f);
-            glm::vec3 upHint = (std::abs(aimDir.y) > 0.99f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
-
-            const float range = std::max(light.range, 0.1f);
-            const float nearPlane = std::max(range * 0.01f, 0.05f);
-            const float farPlane = std::max(range, nearPlane + 0.1f);
-            const float fovY = glm::radians(glm::clamp(light.shadowFovDegrees, 1.0f, 170.0f));
-
-            lightView = glm::lookAt(light.position, light.position + aimDir, upHint);
-            lightProj = glm::perspectiveRH_ZO(fovY, 1.0f, nearPlane, farPlane);
-
+            const glm::vec3 aimDir = glm::length(light.aimDirection) > 0.0001f ? glm::normalize(light.aimDirection)
+                                                                               : glm::vec3(0.0f, -1.0f, 0.0f);
             ubo.lightDirection = aimDir;
             ubo.lightPos = light.position;
-            ubo.lightRange = range;
+            ubo.lightRange = std::max(light.range, 0.1f);
 
-            float texelWorldSize = (2.0f * farPlane * std::tan(fovY * 0.5f)) / static_cast<float>(SHADOW_MAP_SIZE);
-            shadowNormalBias = texelWorldSize * 1.5f;
+            if (m_shadowActive) {
+                const LocalShadowData local = (light.type == LightType::Point)
+                    ? computePointLightShadow(light.position, light.range)
+                    : computeSpotLightShadow(light.position, aimDir, light.range, light.shadowFovDegrees);
+
+                m_shadowLayerCount = local.layerCount;
+                for (uint32_t i = 0; i < local.layerCount; ++i) {
+                    ubo.shadowMatrices[i] = local.viewProj[i];
+                    m_shadowLayerMatrices[i] = local.viewProj[i];
+                }
+                localNear = local.nearPlane;
+                localFar = local.farPlane;
+                localTexelPerDist = (2.0f * local.tanHalfFov) / static_cast<float>(m_shadowResolution);
+            }
         }
 
-        m_lightViewProj = lightProj * lightView;
-        ubo.lightSpaceMatrix = m_lightViewProj;
-        ubo.lightParams = glm::vec4(std::max(light.shadowSoftness, 0.1f), shadowNormalBias, 0.0f, 0.0f);
+        ubo.lightSpaceMatrix = ubo.shadowMatrices[0];
+        ubo.lightParams = glm::vec4(softness, 0.0f, 0.0f, 0.0f);
+
+        ubo.shadowParams0 = glm::vec4(m_shadowActive ? 1.0f : 0.0f, static_cast<float>(cascadeCount),
+                                      settings.maxDistance, settings.maxDistance * (1.0f - settings.fadeFraction));
+        ubo.shadowParams1 = glm::vec4(static_cast<float>(preset.pcfTaps),
+                                      contactHardening ? static_cast<float>(preset.blockerTaps) : 0.0f,
+                                      preset.maxFilterTexels, settings.cascadeBlend);
+        ubo.shadowParams2 = glm::vec4(settings.normalBiasTexels, settings.depthBiasTexels, softness, penumbraScale);
+        ubo.shadowParams3 = glm::vec4(localNear, localFar, localTexelPerDist, static_cast<float>(m_shadowResolution));
+        ubo.shadowParams4 = glm::vec4((settings.debugCascades && light.type == LightType::Sun) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
 
         for (size_t i = 0; i < m_uniformBuffersMapped.size(); i++) {
             memcpy(m_uniformBuffersMapped[i], &ubo, sizeof(ubo));
@@ -884,11 +915,11 @@ namespace slate {
         scissor.extent = {static_cast<uint32_t>(viewportSize.x), static_cast<uint32_t>(viewportSize.y)};
 
         float aspect = viewportSize.x / viewportSize.y;
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.001f, 1000.0f);
+        glm::mat4 proj = glm::perspective(m_cameraFovY, aspect, m_cameraNear, m_cameraFar);
         proj[1][1] *= -1.0f;
 
         glm::vec3 cameraPos = glm::vec3(glm::inverse(viewMatrix)[3]);
-        updateUniformBuffer(cameraPos);
+        updateUniformBuffer(cameraPos, viewMatrix, aspect);
         updateDynamicLightBuffer();
 
         std::array<VkDescriptorSet, 1> descriptorSetsToBind = {
@@ -896,78 +927,7 @@ namespace slate {
         };
 
         // shadow pass
-
-        VkClearValue shadowClearValue{};
-        shadowClearValue.depthStencil = {1.0f, 0};
-
-        VkRenderPassBeginInfo shadowPassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        shadowPassInfo.renderPass = m_shadowRenderPass;
-        shadowPassInfo.framebuffer = m_shadowFramebuffer;
-        shadowPassInfo.renderArea.offset = {0, 0};
-        shadowPassInfo.renderArea.extent = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE};
-        shadowPassInfo.clearValueCount = 1;
-        shadowPassInfo.pClearValues = &shadowClearValue;
-
-        vkCmdBeginRenderPass(commandBuffer, &shadowPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        VkViewport shadowViewport{};
-        shadowViewport.x = 0.0f;
-        shadowViewport.y = 0.0f;
-        shadowViewport.width = static_cast<float>(SHADOW_MAP_SIZE);
-        shadowViewport.height = static_cast<float>(SHADOW_MAP_SIZE);
-        shadowViewport.minDepth = 0.0f;
-        shadowViewport.maxDepth = 1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &shadowViewport);
-
-        VkRect2D shadowScissor{};
-        shadowScissor.offset = {0, 0};
-        shadowScissor.extent = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE};
-        vkCmdSetScissor(commandBuffer, 0, 1, &shadowScissor);
-
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
-
-        VkDescriptorSet globalDescSet = m_globalDescriptorSets[m_currentFrame];
-        vkCmdBindDescriptorSets(
-            commandBuffer,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            m_shadowPipelineLayout,
-            0, 1, &globalDescSet,
-            0, nullptr
-        );
-
-        for (const auto& mesh : m_sceneMeshes) {
-            if (!mesh || mesh->isTransparent()) continue;
-            mesh->bind(commandBuffer);
-
-            uint32_t matId = mesh->getMaterialId();
-            if (matId >= m_globalMaterials.size() || m_globalMaterials[matId].descriptorSets.empty()) {
-                matId = 0;
-            }
-
-            if (matId < m_globalMaterials.size() && !m_globalMaterials[matId].descriptorSets.empty()) {
-                VkDescriptorSet matDescSet = m_globalMaterials[matId].descriptorSets[m_currentFrame];
-
-                vkCmdBindDescriptorSets(
-                    commandBuffer,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    m_shadowPipelineLayout,
-                    1,
-                    1, &matDescSet,
-                    0, nullptr
-                );
-            }
-
-            struct ShadowPushConstants {
-                glm::mat4 modelMatrix;
-                glm::mat4 viewProjMatrix;
-                uint32_t materialId = 0;
-            } shadowPushData{mesh->getModelMatrix(), m_lightViewProj, mesh->getMaterialId()};
-
-            vkCmdPushConstants(commandBuffer, m_shadowPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ShadowPushConstants), &shadowPushData);
-            mesh->draw(commandBuffer);
-        }
-
-        vkCmdEndRenderPass(commandBuffer);
+        recordShadowPasses(commandBuffer);
 
         // opaque
 
@@ -1281,6 +1241,10 @@ namespace slate {
     void VulkanRenderer::drawFrame(const glm::mat4& viewMatrix, glm::vec2 viewportOffset, glm::vec2 viewportSize) {
         // wait for gpu
         vkWaitForFences(m_device, 1, &m_inFlightFence, VK_TRUE, UINT64_MAX);
+
+        if (sanitizeShadowSettings(m_shadowSettings).resolution != m_shadowResolution) {
+            recreateShadowResources();
+        }
 
         // get img from swapchain
         uint32_t imageIndex;
@@ -1641,7 +1605,12 @@ namespace slate {
             dynamicLightBufferInfo.offset = 0;
             dynamicLightBufferInfo.range = sizeof(DynamicLightBufferGPU);
 
-            std::array<VkWriteDescriptorSet, 5> descriptorWrites{};
+            VkDescriptorImageInfo shadowDepthInfo{};
+            shadowDepthInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            shadowDepthInfo.imageView = m_shadowMapImageView;
+            shadowDepthInfo.sampler = m_shadowDepthSampler;
+
+            std::array<VkWriteDescriptorSet, 6> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = m_globalDescriptorSets[i];
@@ -1682,6 +1651,14 @@ namespace slate {
             descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             descriptorWrites[4].descriptorCount = 1;
             descriptorWrites[4].pBufferInfo = &dynamicLightBufferInfo;
+
+            descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[5].dstSet = m_globalDescriptorSets[i];
+            descriptorWrites[5].dstBinding = 5;
+            descriptorWrites[5].dstArrayElement = 0;
+            descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[5].descriptorCount = 1;
+            descriptorWrites[5].pImageInfo = &shadowDepthInfo;
 
             vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
@@ -1750,8 +1727,14 @@ namespace slate {
         dynamicLightBinding.descriptorCount = 1;
         dynamicLightBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        std::array<VkDescriptorSetLayoutBinding, 5> globalBindings = {
-            uboLayoutBinding, sceneColorBinding, detailNormalBinding, shadowMapBinding, dynamicLightBinding
+        VkDescriptorSetLayoutBinding shadowDepthBinding{};
+        shadowDepthBinding.binding = 5;
+        shadowDepthBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        shadowDepthBinding.descriptorCount = 1;
+        shadowDepthBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 6> globalBindings = {
+            uboLayoutBinding, sceneColorBinding, detailNormalBinding, shadowMapBinding, dynamicLightBinding, shadowDepthBinding
         };
 
         VkDescriptorSetLayoutCreateInfo globalLayoutInfo{};
@@ -2210,7 +2193,7 @@ namespace slate {
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = VK_CULL_MODE_NONE;
         rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizer.depthBiasEnable = VK_FALSE;
+        rasterizer.depthBiasEnable = VK_TRUE;
 
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -2232,22 +2215,17 @@ namespace slate {
         std::vector<VkDynamicState> dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_DEPTH_BIAS,
         };
         VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
         dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicStateInfo.pDynamicStates = dynamicStates.data();
 
-        struct ShadowPushConstantData {
-            glm::mat4 modelMatrix;
-            glm::mat4 viewProjMatrix;
-            uint32_t materialIndex;
-        };
-
         VkPushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(ShadowPushConstantData);
+        pushConstantRange.size = sizeof(ShadowPushConstants);
 
         std::array<VkDescriptorSetLayout, 2> shadowSetLayouts = { m_globalDescriptorSetLayout, m_materialDescriptorSetLayout };
 
@@ -2558,33 +2536,240 @@ namespace slate {
     }
 
     void VulkanRenderer::createShadowResources() {
+        m_shadowResolution = sanitizeShadowSettings(m_shadowSettings).resolution;
+        const uint32_t res = m_shadowResolution;
+
         createImage(
-            SHADOW_MAP_SIZE, SHADOW_MAP_SIZE,
+            res, res,
             m_depthFormat,
             VK_IMAGE_TILING_OPTIMAL,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             m_shadowMapImage,
-            m_shadowMapImageMemory
+            m_shadowMapImageMemory,
+            SHADOW_MAP_LAYERS
         );
 
-        m_shadowMapImageView = createImageView(m_shadowMapImage, m_depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = m_shadowMapImage;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        viewInfo.format = m_depthFormat;
+        viewInfo.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, SHADOW_MAP_LAYERS};
+        if (vkCreateImageView(m_device, &viewInfo, nullptr, &m_shadowMapImageView) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shadow map array view!");
+        }
 
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-        samplerInfo.compareEnable = VK_TRUE;
-        samplerInfo.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        for (uint32_t layer = 0; layer < SHADOW_MAP_LAYERS; ++layer) {
+            VkImageViewCreateInfo layerInfo = viewInfo;
+            layerInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            layerInfo.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, layer, 1};
+            if (vkCreateImageView(m_device, &layerInfo, nullptr, &m_shadowLayerViews[layer]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create shadow map layer view!");
+            }
+        }
 
-        if (vkCreateSampler(m_device, &samplerInfo, nullptr, &m_shadowMapSampler) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create shadow map sampler!");
+        VkCommandBuffer cmd = beginSingleTimeCommands();
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_shadowMapImage;
+        barrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, SHADOW_MAP_LAYERS};
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+        endSingleTimeCommands(cmd);
+
+        if (m_shadowMapSampler == VK_NULL_HANDLE) {
+            VkSamplerCreateInfo samplerInfo{};
+            samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+            samplerInfo.magFilter = VK_FILTER_LINEAR;
+            samplerInfo.minFilter = VK_FILTER_LINEAR;
+            samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+            samplerInfo.compareEnable = VK_TRUE;
+            samplerInfo.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+            samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+            samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+            if (vkCreateSampler(m_device, &samplerInfo, nullptr, &m_shadowMapSampler) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create shadow map sampler!");
+            }
+        }
+
+        if (m_shadowDepthSampler == VK_NULL_HANDLE) {
+            VkSamplerCreateInfo samplerInfo{};
+            samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+            samplerInfo.magFilter = VK_FILTER_NEAREST;
+            samplerInfo.minFilter = VK_FILTER_NEAREST;
+            samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+            samplerInfo.compareEnable = VK_FALSE;
+            samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+            samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+            if (vkCreateSampler(m_device, &samplerInfo, nullptr, &m_shadowDepthSampler) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create shadow depth sampler!");
+            }
+        }
+    }
+
+    void VulkanRenderer::destroyShadowResources() {
+        for (auto& fb : m_shadowFramebuffers) {
+            if (fb != VK_NULL_HANDLE) {
+                vkDestroyFramebuffer(m_device, fb, nullptr);
+                fb = VK_NULL_HANDLE;
+            }
+        }
+        for (auto& view : m_shadowLayerViews) {
+            if (view != VK_NULL_HANDLE) {
+                vkDestroyImageView(m_device, view, nullptr);
+                view = VK_NULL_HANDLE;
+            }
+        }
+        if (m_shadowMapImageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(m_device, m_shadowMapImageView, nullptr);
+            m_shadowMapImageView = VK_NULL_HANDLE;
+        }
+        if (m_shadowMapImage != VK_NULL_HANDLE) {
+            vkDestroyImage(m_device, m_shadowMapImage, nullptr);
+            m_shadowMapImage = VK_NULL_HANDLE;
+        }
+        if (m_shadowMapImageMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(m_device, m_shadowMapImageMemory, nullptr);
+            m_shadowMapImageMemory = VK_NULL_HANDLE;
+        }
+    }
+
+    void VulkanRenderer::recreateShadowResources() {
+        vkDeviceWaitIdle(m_device);
+
+        destroyShadowResources();
+        createShadowResources();
+        createShadowFramebuffer();
+
+        for (size_t i = 0; i < m_globalDescriptorSets.size(); i++) {
+            VkDescriptorImageInfo compareInfo{};
+            compareInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            compareInfo.imageView = m_shadowMapImageView;
+            compareInfo.sampler = m_shadowMapSampler;
+
+            VkDescriptorImageInfo depthInfo{};
+            depthInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            depthInfo.imageView = m_shadowMapImageView;
+            depthInfo.sampler = m_shadowDepthSampler;
+
+            std::array<VkWriteDescriptorSet, 2> writes{};
+            writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[0].dstSet = m_globalDescriptorSets[i];
+            writes[0].dstBinding = 3;
+            writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[0].descriptorCount = 1;
+            writes[0].pImageInfo = &compareInfo;
+
+            writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[1].dstSet = m_globalDescriptorSets[i];
+            writes[1].dstBinding = 5;
+            writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[1].descriptorCount = 1;
+            writes[1].pImageInfo = &depthInfo;
+
+            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+        }
+
+        std::cout << "shadow map recreated at " << m_shadowResolution << "x" << m_shadowResolution
+                  << " x " << SHADOW_MAP_LAYERS << " layers" << std::endl;
+    }
+
+    void VulkanRenderer::recordShadowPasses(VkCommandBuffer commandBuffer) {
+        if (!m_shadowActive || m_shadowLayerCount == 0 || m_shadowPipeline == VK_NULL_HANDLE) return;
+
+        const ShadowSettings settings = sanitizeShadowSettings(m_shadowSettings);
+
+        m_shadowCasterSpheres.resize(m_sceneMeshes.size());
+        for (size_t i = 0; i < m_sceneMeshes.size(); ++i) {
+            const auto& mesh = m_sceneMeshes[i];
+            if (!mesh || mesh->isTransparent()) {
+                m_shadowCasterSpheres[i] = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
+                continue;
+            }
+            glm::vec3 center;
+            float radius;
+            mesh->getWorldBoundingSphere(center, radius);
+            m_shadowCasterSpheres[i] = glm::vec4(center, radius);
+        }
+
+        VkClearValue clearValue{};
+        clearValue.depthStencil = {1.0f, 0};
+
+        const VkExtent2D extent{m_shadowResolution, m_shadowResolution};
+
+        VkViewport viewport{};
+        viewport.width = static_cast<float>(m_shadowResolution);
+        viewport.height = static_cast<float>(m_shadowResolution);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        VkRect2D scissor{};
+        scissor.extent = extent;
+
+        const VkDescriptorSet globalDescSet = m_globalDescriptorSets[m_currentFrame];
+
+        for (uint32_t layer = 0; layer < m_shadowLayerCount; ++layer) {
+            const FrustumPlanes planes = extractFrustumPlanes(m_shadowLayerMatrices[layer]);
+
+            VkRenderPassBeginInfo passInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+            passInfo.renderPass = m_shadowRenderPass;
+            passInfo.framebuffer = m_shadowFramebuffers[layer];
+            passInfo.renderArea.offset = {0, 0};
+            passInfo.renderArea.extent = extent;
+            passInfo.clearValueCount = 1;
+            passInfo.pClearValues = &clearValue;
+
+            vkCmdBeginRenderPass(commandBuffer, &passInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
+            vkCmdSetDepthBias(commandBuffer, settings.rasterDepthBias, 0.0f, settings.rasterSlopeBias);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipelineLayout,
+                                    0, 1, &globalDescSet, 0, nullptr);
+
+            for (size_t i = 0; i < m_sceneMeshes.size(); ++i) {
+                const glm::vec4 sphere = m_shadowCasterSpheres[i];
+                if (sphere.w < 0.0f) continue;
+                if (settings.cullCasters && !sphereIntersectsFrustum(planes, glm::vec3(sphere), sphere.w)) continue;
+
+                const auto& mesh = m_sceneMeshes[i];
+                mesh->bind(commandBuffer);
+
+                uint32_t matId = mesh->getMaterialId();
+                if (matId >= m_globalMaterials.size() || m_globalMaterials[matId].descriptorSets.empty()) {
+                    matId = 0;
+                }
+                if (matId < m_globalMaterials.size() && !m_globalMaterials[matId].descriptorSets.empty()) {
+                    VkDescriptorSet matDescSet = m_globalMaterials[matId].descriptorSets[m_currentFrame];
+                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipelineLayout,
+                                            1, 1, &matDescSet, 0, nullptr);
+                }
+
+                ShadowPushConstants push{};
+                push.modelMatrix = mesh->getModelMatrix();
+                push.materialId = matId;
+                push.layer = layer;
+                vkCmdPushConstants(commandBuffer, m_shadowPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+                                   0, sizeof(ShadowPushConstants), &push);
+                mesh->draw(commandBuffer);
+            }
+
+            vkCmdEndRenderPass(commandBuffer);
         }
     }
 
@@ -2691,7 +2876,6 @@ namespace slate {
         if (materialIndex >= m_globalMaterials.size()) return false;
         auto& mat = m_globalMaterials[materialIndex];
 
-        // load to albedo slots
         if (!loadTexture(filepath, mat.albedoImage, mat.albedoImageMemory, mat.albedoImageView, mat.textureSampler)) {
             return false;
         }
@@ -3471,10 +3655,7 @@ namespace slate {
             vkDestroyPipelineLayout(m_device, m_shadowPipelineLayout, nullptr);
             m_shadowPipelineLayout = VK_NULL_HANDLE;
         }
-        if (m_shadowFramebuffer != VK_NULL_HANDLE) {
-            vkDestroyFramebuffer(m_device, m_shadowFramebuffer, nullptr);
-            m_shadowFramebuffer = VK_NULL_HANDLE;
-        }
+        destroyShadowResources();
         if (m_shadowRenderPass != VK_NULL_HANDLE) {
             vkDestroyRenderPass(m_device, m_shadowRenderPass, nullptr);
             m_shadowRenderPass = VK_NULL_HANDLE;
@@ -3483,17 +3664,9 @@ namespace slate {
             vkDestroySampler(m_device, m_shadowMapSampler, nullptr);
             m_shadowMapSampler = VK_NULL_HANDLE;
         }
-        if (m_shadowMapImageView != VK_NULL_HANDLE) {
-            vkDestroyImageView(m_device, m_shadowMapImageView, nullptr);
-            m_shadowMapImageView = VK_NULL_HANDLE;
-        }
-        if (m_shadowMapImage != VK_NULL_HANDLE) {
-            vkDestroyImage(m_device, m_shadowMapImage, nullptr);
-            m_shadowMapImage = VK_NULL_HANDLE;
-        }
-        if (m_shadowMapImageMemory != VK_NULL_HANDLE) {
-            vkFreeMemory(m_device, m_shadowMapImageMemory, nullptr);
-            m_shadowMapImageMemory = VK_NULL_HANDLE;
+        if (m_shadowDepthSampler != VK_NULL_HANDLE) {
+            vkDestroySampler(m_device, m_shadowDepthSampler, nullptr);
+            m_shadowDepthSampler = VK_NULL_HANDLE;
         }
 
         m_sceneMeshes.clear();
