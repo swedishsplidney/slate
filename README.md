@@ -46,7 +46,7 @@
 * **obj / mtl importing:** to import all the 3d models and their materials
 * **automatic earcut triangulation:** so it can handle the most complex of n-gons
 * **fully custom persistent ui system:** designed from scratch for efficiency and functionality
-* **shadow mapping:** custom 4096x4096 shadow mapping system with poisson disk and noise randomization
+* **cascaded shadow mapping:** custom shadow mapping system with poisson disk and 4 detail levels
 * **physics:** jolt physics integration
 
 ---
@@ -55,6 +55,20 @@
 
 * scriptable objects
 * cmake / make / compiler integration
+
+---
+
+# controls:
+
+* WASD: move
+* right-click + drag: look around
+* left-click: select
+* ctrl + s: save
+* ctrl + o: load
+* f5: toggle physics
+* f6: shadow cascade debug
+* f7: change shadow detail level
+* f8: toggle shadows
 
 ---
 
@@ -101,6 +115,13 @@ then you can run it:
 * SDL3
 * CMake
 * JetBrains CLion / Neovim
+
+---
+
+# gallery:
+
+### physics
+![physics demo gif](/images/physics.gif)
 
 ---
 
