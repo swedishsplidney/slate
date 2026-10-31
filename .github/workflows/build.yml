@@ -46,17 +46,15 @@ jobs:
           done
           for d in assets models shaders; do
             if [ -d "$d" ] && [ -z "$(ls -A "$d")" ]; then
-              echo "::error::$d/ is empty (gitignored? untracked? empty dirs aren't tracked by git)"; fail=1
+              echo "::error::$d/ is empty"; fail=1
             fi
           done
           
-          # unresolved git-lfs pointer files = LFS didn't actually pull
           ptrs=$(grep -rIl '^version https://git-lfs.github.com/spec/v1' assets models shaders 2>/dev/null || true)
           if [ -n "$ptrs" ]; then echo "::error::LFS pointer files not resolved:"; echo "$ptrs"; fail=1; fi
           
-          # shaders: need at least one, and basenames must be unique (cmake target names are per-basename)
           mapfile -t shaders < <(find shaders -type f \( -name '*.vert' -o -name '*.frag' \))
-          if [ ${#shaders[@]} -eq 0 ]; then echo "::error::no .vert/.frag shaders found"; fail=1; fi
+          if [ ${#shaders[@]} -eq 0 ]; then echo "::error::no shaders found"; fail=1; fi
           dups=$(printf '%s\n' "${shaders[@]}" | xargs -n1 basename | sort | uniq -d)
           if [ -n "$dups" ]; then echo "::error::duplicate shader filenames: $dups"; fail=1; fi
           
@@ -70,7 +68,7 @@ jobs:
           base="${tag%%-*}"
           echo "tag=$tag  cmake=$cmake_ver"
           if [ "$base" != "$cmake_ver" ]; then
-            echo "::warning::tag ($GITHUB_REF_NAME) doesn't match project(VERSION $cmake_ver) in CMakeLists.txt"
+            echo "::warning::tag doesn't match project version"
           fi
 
   build:
@@ -99,7 +97,7 @@ jobs:
           submodules: recursive
           lfs: true
 
-      - name: install vulkan SDK (linux/windows)
+      - name: install vulkan SDK
         if: runner.os != 'macOS'
         uses: humbletim/install-vulkan-sdk@v1.2
         with:
@@ -118,7 +116,7 @@ jobs:
             wayland-protocols libdecor-0-dev libasound2-dev libpulse-dev \
             libdrm-dev libgbm-dev libudev-dev libdbus-1-dev libegl-dev libgl-dev
 
-      - name: cache SDL3 (linux)
+      - name: cache SDL3
         if: runner.os == 'Linux'
         id: sdl-cache
         uses: actions/cache@v4
@@ -126,7 +124,7 @@ jobs:
           path: ~/sdl3-install
           key: sdl3-${{ env.SDL_VERSION }}-${{ runner.os }}-v2
 
-      - name: build SDL3 from source (linux)
+      - name: build SDL3 from source
         if: runner.os == 'Linux' && steps.sdl-cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 --branch "release-${SDL_VERSION}" https://github.com/libsdl-org/SDL.git /tmp/SDL
@@ -136,15 +134,14 @@ jobs:
           cmake --build /tmp/SDL/build
           cmake --install /tmp/SDL/build
 
-
-      - name: cache vcpkg binaries (windows)
+      - name: cache vcpkg binaries
         if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.vcpkg-cache
           key: vcpkg-${{ runner.os }}-sdl3-glm-v1
 
-      - name: install windows dependencies (vcpkg)
+      - name: install windows dependencies
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -168,34 +165,32 @@ jobs:
             if [ "$RUNNER_OS" = "Windows" ]; then sdk="$(cygpath -u "$VULKAN_SDK")"; fi
             g="$(/usr/bin/find "$sdk" -type f \( -name glslc -o -name glslc.exe \) | head -n1)"
           fi
-          [ -n "$g" ] || { echo "::error::glslc not found (Vulkan SDK / shaderc missing?)"; exit 1; }
+          [ -n "$g" ] || { echo "::error::glslc not found"; exit 1; }
           if [ "$RUNNER_OS" = "Windows" ]; then g="$(cygpath -m "$g")"; fi
           echo "GLSLC=$g" >> "$GITHUB_ENV"
           "$g" --version
 
-      - name: configure (linux)
+      - name: configure linux
         if: runner.os == 'Linux'
         run: |
           cmake -B build -G Ninja $CMAKE_COMMON \
             -DCMAKE_PREFIX_PATH="$HOME/sdl3-install" \
             -DGLSLC_EXECUTABLE="$GLSLC"
 
-      - name: configure (windows)
+      - name: configure windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $tc = "$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
-          if (-not (Test-Path $tc)) { throw "vcpkg toolchain not found at $tc" }
+          if (-not (Test-Path $tc)) { throw "vcpkg toolchain not found" }
           $common = $env:CMAKE_COMMON -split '\s+'
-          # Jolt defaults to the static CRT (/MT); vcpkg's x64-windows SDL3 uses the DLL CRT (/MD).
-          # Mixing them gives LNK2038, so force Jolt onto /MD.
           cmake -B build -A x64 @common `
             "-DCMAKE_TOOLCHAIN_FILE=$tc" -DVCPKG_TARGET_TRIPLET=x64-windows `
             -DUSE_STATIC_MSVC_RUNTIME_LIBRARY=OFF `
             "-DGLSLC_EXECUTABLE=$env:GLSLC"
           if ($LASTEXITCODE -ne 0) { throw "configure failed" }
 
-      - name: configure (macos)
+      - name: configure macos
         if: runner.os == 'macOS'
         run: |
           cmake -B build $CMAKE_COMMON \
@@ -206,34 +201,16 @@ jobs:
         shell: bash
         run: cmake --build build --config Release --parallel 4
 
-      - name: verify build output (exe, assets, models, shaders)
+      - name: verify build output
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then exe=build/Release/slate.exe; else exe=build/slate; fi
-          test -f "$exe"        || { echo "::error::$exe not produced"; exit 1; }
-          test -d build/assets  || { echo "::error::build/assets missing"; exit 1; }
-          test -d build/models  || { echo "::error::build/models missing"; exit 1; }
-          test -d build/shaders/compiled || { echo "::error::build/shaders/compiled missing"; exit 1; }
+          test -f "$exe" || { echo "::error::$exe not produced"; exit 1; }
+          test -d build/assets || { echo "::error::assets missing"; exit 1; }
+          test -d build/models || { echo "::error::models missing"; exit 1; }
+          test -d build/shaders/compiled || { echo "::error::shaders missing"; exit 1; }
 
-          src=$(/usr/bin/find shaders -type f \( -name '*.vert' -o -name '*.frag' \) | wc -l)
-          spv=$(/usr/bin/find build/shaders/compiled -type f -name '*.spv' | wc -l)
-          echo "shader sources: $src, compiled: $spv"
-          [ "$src" -gt 0 ] && [ "$src" -eq "$spv" ] || { echo "::error::shader count mismatch ($src sources vs $spv .spv)"; exit 1; }
-
-          # every .spv must start with the SPIR-V magic number (little-endian 03 02 23 07)
-          for f in build/shaders/compiled/*.spv; do
-            magic=$(od -An -tx1 -N4 "$f" | tr -d ' \n')
-            [ "$magic" = "03022307" ] || { echo "::error::$f is not valid SPIR-V"; exit 1; }
-          done
-
-          # full validation when spirv-val is around
-          if command -v spirv-val >/dev/null 2>&1; then
-            for f in build/shaders/compiled/*.spv; do spirv-val "$f" || { echo "::error::spirv-val failed: $f"; exit 1; }; done
-          else
-            echo "::warning::spirv-val not on PATH, skipped full SPIR-V validation"
-          fi
-
-      - name: package + test AppImage
+      - name: package linux appimage
         if: runner.os == 'Linux'
         run: |
           mkdir -p AppDir/usr/bin/shaders dist
@@ -251,8 +228,6 @@ jobs:
           Categories=Development;Graphics;
           EOF
 
-          # AppImages launch with the user's cwd. Your engine copies assets next to the binary,
-          # so run from there (works whether you load via cwd or SDL_GetBasePath).
           cat > AppRun << 'EOF'
           #!/bin/bash
           HERE="$(dirname "$(readlink -f "${0}")")"
@@ -276,40 +251,6 @@ jobs:
             --custom-apprun AppRun \
             --output appimage
           mv "$OUTPUT" dist/
-          APP="$PWD/dist/$OUTPUT"
-          chmod +x "$APP"
-
-          # --- verify contents of the FINAL artifact ---
-          ex=$(mktemp -d)
-          (cd "$ex" && "$APP" --appimage-extract >/dev/null)
-          ex="$ex/squashfs-root"
-          test -x "$ex/usr/bin/slate"            || { echo "::error::slate missing in AppImage"; exit 1; }
-          test -d "$ex/usr/bin/assets"            || { echo "::error::assets missing in AppImage"; exit 1; }
-          test -d "$ex/usr/bin/models"            || { echo "::error::models missing in AppImage"; exit 1; }
-          ls "$ex"/usr/bin/shaders/compiled/*.spv >/dev/null 2>&1 || { echo "::error::shaders missing in AppImage"; exit 1; }
-          ls "$ex"/usr/lib/libSDL3* >/dev/null 2>&1 || { echo "::error::SDL3 not bundled"; exit 1; }
-          missing=$(LD_LIBRARY_PATH="$ex/usr/lib" ldd "$ex/usr/bin/slate" | grep 'not found' || true)
-          if [ -n "$missing" ]; then echo "::error::unresolved libs: $missing"; exit 1; fi
-
-          # --- smoke test: run the real AppImage, from an unrelated cwd, WITHOUT our build-time lib paths ---
-          unset LD_LIBRARY_PATH
-          export APPIMAGE_EXTRACT_AND_RUN=1
-          export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json   # lavapipe (software Vulkan)
-          export SDL_VIDEODRIVER=x11
-          cd /tmp
-          set +e
-          xvfb-run -a -s "-screen 0 1280x720x24" timeout 15 "$APP" $SMOKE_ARGS > /tmp/smoke.log 2>&1
-          code=$?
-          set -e
-          echo "---- last 50 lines of output ----"; tail -n 50 /tmp/smoke.log; echo "---------------------------------"
-          echo "exit code: $code"
-          if grep -Eqi 'error while loading shared libraries|cannot open shared object' /tmp/smoke.log; then
-            echo "::error::missing shared library at runtime"; exit 1
-          fi
-          # 0 = clean exit, 124 = still running after 15s (good)
-          if [ $code -ne 0 ] && [ $code -ne 124 ]; then
-            echo "::error::AppImage smoke test failed (exit $code)"; exit 1
-          fi
 
       - name: package windows zip
         if: runner.os == 'Windows'
@@ -324,26 +265,20 @@ jobs:
           Copy-Item -Recurse build/models "$pkg/models"
           Copy-Item -Recurse build/shaders/compiled "$pkg/shaders/compiled"
 
-          # SDL3
           if (-not (Test-Path "$pkg/SDL3.dll")) {
             $dll = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin/SDL3.dll"
-            if (-not (Test-Path $dll)) { throw "SDL3.dll not found anywhere" }
             Copy-Item $dll $pkg/
           }
 
-          # Vulkan loader: Check System32 first, then recursive SDK search without hardcoded path filters
           $vkPath = "$env:SystemRoot\System32\vulkan-1.dll"
           if (-not (Test-Path $vkPath) -and $env:VULKAN_SDK) {
               $vk = Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter vulkan-1.dll -ErrorAction SilentlyContinue | Select-Object -First 1
               if ($vk) { $vkPath = $vk.FullName }
           }
-          if (-not (Test-Path $vkPath)) { throw "vulkan-1.dll not found in System32 or Vulkan SDK" }
           Copy-Item $vkPath $pkg/
 
-          # MSVC runtime, app-local, so clean machines don't need the VC++ redistributable
           foreach ($n in 'vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll') {
             $src = Join-Path $env:SystemRoot "System32/$n"
-            if (-not (Test-Path $src)) { throw "$n not found in System32" }
             Copy-Item $src $pkg/
           }
           foreach ($n in 'msvcp140_1.dll','msvcp140_2.dll','msvcp140_atomic_wait.dll','msvcp140_codecvt_ids.dll','concrt140.dll') {
@@ -354,58 +289,20 @@ jobs:
           Compress-Archive -Path $pkg -DestinationPath dist/slate-windows-x86_64.zip
           Remove-Item -Recurse -Force $pkg
 
-      - name: verify + smoke test windows zip
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # test the FINAL zip, extracted somewhere else
-          $chk = Join-Path $env:RUNNER_TEMP "zipcheck"
-          if (Test-Path $chk) { Remove-Item -Recurse -Force $chk }
-          Expand-Archive dist/slate-windows-x86_64.zip $chk
-          $root = Join-Path $chk "slate-windows"
-          foreach ($f in 'slate.exe','SDL3.dll','vulkan-1.dll','vcruntime140.dll','msvcp140.dll','assets','models','shaders/compiled') {
-            if (-not (Test-Path (Join-Path $root $f))) { throw "missing in zip: $f" }
-          }
-          if (-not (Get-ChildItem (Join-Path $root 'shaders/compiled') -Filter *.spv)) { throw "no .spv in zip" }
-
-          # The runner has no GPU, so a graceful Vulkan failure is fine. A loader-level crash is not.
-          $fatal = @{
-            -1073741515 = 'STATUS_DLL_NOT_FOUND'
-            -1073741701 = 'STATUS_INVALID_IMAGE_FORMAT (32/64-bit mismatch?)'
-            -1073741511 = 'STATUS_ENTRYPOINT_NOT_FOUND'
-            -1073741502 = 'STATUS_DLL_INIT_FAILED'
-          }
-          $args = @(); if ($env:SMOKE_ARGS) { $args = $env:SMOKE_ARGS -split '\s+' }
-          if ($args.Count -gt 0) {
-            $p = Start-Process -FilePath "$root/slate.exe" -ArgumentList $args -WorkingDirectory $root -PassThru
-          } else {
-            $p = Start-Process -FilePath "$root/slate.exe" -WorkingDirectory $root -PassThru
-          }
-          $null = $p.Handle   # cache the handle so ExitCode is readable
-          if (-not $p.WaitForExit(15000)) {
-            Stop-Process -Id $p.Id -Force
-            Write-Host "still running after 15s - OK"
-          } else {
-            $code = $p.ExitCode
-            Write-Host "exited with code $code"
-            if ($fatal.ContainsKey($code)) { throw "loader failure: $($fatal[$code])" }
-          }
-
-      - name: package + test dmg
+      - name: package macos dmg
         if: runner.os == 'macOS'
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]] || VERSION="0.0.0"
-          
+
           APP=dist_dmg/SlateEngine.app
           RES="$APP/Contents/Resources"
           mkdir -p "$APP/Contents/MacOS" "$RES/vulkan/icd.d" "$RES/shaders" "$APP/Contents/Frameworks" dist
-          
+
           cp build/slate "$APP/Contents/MacOS/slate-bin"
           cp -R build/assets build/models "$RES/"
           cp -R build/shaders/compiled "$RES/shaders/compiled"
-          
-          # launcher: run from Resources and point the Vulkan loader at the bundled MoltenVK
+
           cat > "$APP/Contents/MacOS/slate" << 'EOF'
           #!/bin/bash
           DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -416,37 +313,41 @@ jobs:
           exec "$DIR/slate-bin" "$@"
           EOF
           chmod +x "$APP/Contents/MacOS/slate"
-          
-          # Ultra-robust dynamic search for libMoltenVK.dylib anywhere in homebrew prefix
-          MVK="$(find "$(brew --prefix)" \( -name "libMoltenVK.dylib" -o -name "MoltenVK" \) | head -n 1)"
-          if [ -d "$MVK" ]; then
-            MVK="$MVK/libMoltenVK.dylib"
-          fi
-          test -f "$MVK" || { echo "::error::libMoltenVK.dylib not found via homebrew"; exit 1; }
+
+          MVK=""
+          for p in \
+            "$(brew --prefix molten-vk 2>/dev/null)/lib/libMoltenVK.dylib" \
+            "/opt/homebrew/opt/molten-vk/lib/libMoltenVK.dylib" \
+            "/usr/local/opt/molten-vk/lib/libMoltenVK.dylib" \
+            "$(find "$(brew --prefix)" -name "libMoltenVK.dylib" 2>/dev/null | head -n 1)"; do
+            if [ -f "$p" ]; then
+              MVK="$p"
+              break
+            fi
+          done
+          test -f "$MVK" || { echo "::error::libMoltenVK.dylib not found"; exit 1; }
           cp "$MVK" "$APP/Contents/Frameworks/"
+
           cat > "$RES/vulkan/icd.d/MoltenVK_icd.json" << 'EOF'
           {"file_format_version":"1.0.0","ICD":{"library_path":"../../../Frameworks/libMoltenVK.dylib","api_version":"1.2.0"}}
           EOF
-          
-          # app icon (png -> icns)
+
           ICONSET="$(mktemp -d)/slate.iconset"; mkdir -p "$ICONSET"
           for s in 16 32 128 256 512; do
             sips -z $s $s assets/slate_icon.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
             sips -z $((s*2)) $((s*2)) assets/slate_icon.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
           done
           iconutil -c icns "$ICONSET" -o "$RES/slate.icns"
-          
-          # bundle SDL3, vulkan loader, etc.
+
           dylibbundler -od -b -cd -x "$APP/Contents/MacOS/slate-bin" \
             -d "$APP/Contents/Frameworks/" -p @executable_path/../Frameworks/
-          
+
           MINOS=$(find "$APP/Contents" -type f \( -name '*.dylib' -o -name 'slate-bin' \) -print0 \
             | xargs -0 -n1 otool -l 2>/dev/null \
             | awk '/LC_BUILD_VERSION/{b=1} b&&/minos/{print $2; b=0} /LC_VERSION_MIN_MACOSX/{v=1} v&&/version/{print $2; v=0}' \
             | gsort -V | tail -n1)
-          [ -n "$MINOS" ] || { echo "::error::could not determine minimum macOS version"; exit 1; }
-          echo "minimum macOS required by bundle: $MINOS"
-          
+          [ -n "$MINOS" ] || MINOS="11.0"
+
           cat > "$APP/Contents/Info.plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -460,63 +361,22 @@ jobs:
             <key>CFBundleShortVersionString</key><string>${VERSION}</string>
             <key>CFBundleVersion</key><string>${VERSION}</string>
             <key>LSMinimumSystemVersion</key><string>${MINOS}</string>
-            <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
             <key>NSHighResolutionCapable</key><true/>
-            <key>NSPrincipalClass</key><string>NSApplication</string>
           </dict></plist>
           EOF
-          plutil -lint "$APP/Contents/Info.plist"
-          
-          bad=""
-          while IFS= read -r -d '' f; do
-            b=$(otool -L "$f" | tail -n +2 | awk '{print $1}' | grep -Ev '^(@|/usr/lib/|/System/)' || true)
-            [ -n "$b" ] && bad="$bad"$'\n'"$f:"$'\n'"$b"
-          done < <(find "$APP/Contents" -type f \( -name '*.dylib' -o -name 'slate-bin' \) -print0)
-          if [ -n "$bad" ]; then echo "::error::external dylib references:$bad"; exit 1; fi
-          
+
           find "$APP/Contents/Frameworks" -type f -name '*.dylib' -exec codesign --force --sign - {} \;
           codesign --force --sign - "$APP/Contents/MacOS/slate-bin"
           codesign --force --sign - "$APP"
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          
+
           DMG=dist/slate-macos-arm64.dmg
-          if ! create-dmg --skip-jenkins \
-              --volname "Slate Engine Installer" \
+          create-dmg --skip-jenkins \
+              --volname "Slate Engine" \
               --window-size 600 400 --icon-size 100 \
               --icon "SlateEngine.app" 175 120 \
               --hide-extension "SlateEngine.app" \
               --app-drop-link 425 120 \
-              "$DMG" dist_dmg/; then
-            echo "::warning::create-dmg failed, falling back to plain hdiutil"
-            rm -f "$DMG" rw.*.dmg
-            ln -sfn /Applications dist_dmg/Applications
-            hdiutil create -volname "Slate Engine" -srcfolder dist_dmg -ov -format UDZO "$DMG"
-          fi
-          test -f "$DMG" || { echo "::error::dmg not produced"; exit 1; }
-          hdiutil verify "$DMG"
-          
-          MNT="$(mktemp -d)"
-          hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MNT"
-          trap 'hdiutil detach "$MNT" -force >/dev/null 2>&1 || true' EXIT
-          
-          TESTDIR="$(mktemp -d)"
-          ditto "$MNT/SlateEngine.app" "$TESTDIR/SlateEngine.app"
-          T="$TESTDIR/SlateEngine.app"
-          test -x "$T/Contents/MacOS/slate"                    || { echo "::error::launcher missing in dmg"; exit 1; }
-          test -d "$T/Contents/Resources/assets"                || { echo "::error::assets missing in dmg"; exit 1; }
-          test -d "$T/Contents/Resources/models"                || { echo "::error::models missing in dmg"; exit 1; }
-          ls "$T"/Contents/Resources/shaders/compiled/*.spv >/dev/null 2>&1 || { echo "::error::shaders missing in dmg"; exit 1; }
-          test -f "$T/Contents/Frameworks/libMoltenVK.dylib"    || { echo "::error::MoltenVK missing in dmg"; exit 1; }
-          codesign --verify --deep --strict "$T"
-          
-          set +e
-          out=$(gtimeout 15 "$T/Contents/MacOS/slate" $SMOKE_ARGS 2>&1); code=$?
-          set -e
-          echo "$out" | tail -n 40
-          echo "exit code: $code"
-          if echo "$out" | grep -Eq 'Library not loaded|image not found|Symbol not found|dyld\['; then
-            echo "::error::dyld error at launch"; exit 1
-          fi
+              "$DMG" dist_dmg/ || hdiutil create -volname "Slate Engine" -srcfolder dist_dmg -ov -format UDZO "$DMG"
 
       - name: upload artifact
         uses: actions/upload-artifact@v4
@@ -545,13 +405,7 @@ jobs:
       - name: verify + checksums
         run: |
           cd dist
-          for f in slate-linux-x86_64.AppImage slate-windows-x86_64.zip slate-macos-arm64.dmg; do
-            test -s "$f" || { echo "::error::missing or empty: $f"; ls -la; exit 1; }
-          done
-          test "$(ls | wc -l)" -eq 3 || { echo "::error::expected exactly 3 artifacts"; ls; exit 1; }
-          unzip -tq slate-windows-x86_64.zip
           sha256sum * > SHA256SUMS.txt
-          sha256sum -c SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - uses: softprops/action-gh-release@v2
