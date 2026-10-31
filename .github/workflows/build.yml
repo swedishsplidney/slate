@@ -40,7 +40,7 @@ jobs:
         run: |
           shopt -s globstar nullglob
           fail=0
-
+          
           for p in CMakeLists.txt assets models shaders external assets/slate_icon.png; do
             [ -e "$p" ] || { echo "::error::missing in checkout: $p"; fail=1; }
           done
@@ -49,17 +49,17 @@ jobs:
               echo "::error::$d/ is empty (gitignored? untracked? empty dirs aren't tracked by git)"; fail=1
             fi
           done
-
+          
           # unresolved git-lfs pointer files = LFS didn't actually pull
           ptrs=$(grep -rIl '^version https://git-lfs.github.com/spec/v1' assets models shaders 2>/dev/null || true)
           if [ -n "$ptrs" ]; then echo "::error::LFS pointer files not resolved:"; echo "$ptrs"; fail=1; fi
-
+          
           # shaders: need at least one, and basenames must be unique (cmake target names are per-basename)
-          shaders=(shaders/**/*.vert shaders/**/*.frag shaders/*.vert shaders/*.frag)
+          mapfile -t shaders < <(find shaders -type f \( -name '*.vert' -o -name '*.frag' \))
           if [ ${#shaders[@]} -eq 0 ]; then echo "::error::no .vert/.frag shaders found"; fail=1; fi
           dups=$(printf '%s\n' "${shaders[@]}" | xargs -n1 basename | sort | uniq -d)
           if [ -n "$dups" ]; then echo "::error::duplicate shader filenames: $dups"; fail=1; fi
-
+          
           exit $fail
 
       - name: tag matches CMake project version
