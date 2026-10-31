@@ -150,15 +150,3 @@ see the `LICENSE` file for details
 ---
 
 created by **swedishsplidney**
-
-# final stretch! :fear:
-
-this is just final fixes before shipping, so here's a list of what i did:
-
-* made fixed some shadow banding issues
-* made transmissive objects cast partial shadows
-* changed the fresnel calculation
-* changed the specular calculation for transmissive objects
-* changed the alpha mapping
-* fixed serialization
-* 
