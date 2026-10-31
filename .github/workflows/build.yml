@@ -40,7 +40,7 @@ jobs:
         run: |
           shopt -s globstar nullglob
           fail=0
-          
+
           for p in CMakeLists.txt assets models shaders external assets/slate_icon.png; do
             [ -e "$p" ] || { echo "::error::missing in checkout: $p"; fail=1; }
           done
@@ -49,15 +49,15 @@ jobs:
               echo "::error::$d/ is empty"; fail=1
             fi
           done
-          
+
           ptrs=$(grep -rIl '^version https://git-lfs.github.com/spec/v1' assets models shaders 2>/dev/null || true)
           if [ -n "$ptrs" ]; then echo "::error::LFS pointer files not resolved:"; echo "$ptrs"; fail=1; fi
-          
+
           mapfile -t shaders < <(find shaders -type f \( -name '*.vert' -o -name '*.frag' \))
           if [ ${#shaders[@]} -eq 0 ]; then echo "::error::no shaders found"; fail=1; fi
           dups=$(printf '%s\n' "${shaders[@]}" | xargs -n1 basename | sort | uniq -d)
           if [ -n "$dups" ]; then echo "::error::duplicate shader filenames: $dups"; fail=1; fi
-          
+
           exit $fail
 
       - name: tag matches CMake project version
@@ -139,14 +139,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.vcpkg-cache
-          key: vcpkg-${{ runner.os }}-sdl3-glm-v1
+          key: vcpkg-${{ runner.os }}-sdl3-vulkan-glm-v2
 
       - name: install windows dependencies
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install sdl3:x64-windows glm:x64-windows
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install "sdl3[vulkan]:x64-windows" glm:x64-windows
           if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed" }
 
       - name: install mac dependencies
@@ -269,13 +269,6 @@ jobs:
             $dll = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin/SDL3.dll"
             Copy-Item $dll $pkg/
           }
-
-          $vkPath = "$env:SystemRoot\System32\vulkan-1.dll"
-          if (-not (Test-Path $vkPath) -and $env:VULKAN_SDK) {
-              $vk = Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter vulkan-1.dll -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($vk) { $vkPath = $vk.FullName }
-          }
-          Copy-Item $vkPath $pkg/
 
           foreach ($n in 'vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll') {
             $src = Join-Path $env:SystemRoot "System32/$n"
