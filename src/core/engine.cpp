@@ -557,7 +557,7 @@ Engine::~Engine() { cleanup(); }
     }
 
     int iconWidth, iconHeight, iconChannels;
-    unsigned char* iconPixels = stbi_load("assets/icon.png", &iconWidth, &iconHeight, &iconChannels, 4);
+    unsigned char* iconPixels = stbi_load("assets/slate_icon.png", &iconWidth, &iconHeight, &iconChannels, 4);
     if (iconPixels) {
         SDL_Surface* iconSurface = SDL_CreateSurfaceFrom(
             iconWidth, iconHeight, SDL_PIXELFORMAT_RGBA32, iconPixels, iconWidth * 4);
