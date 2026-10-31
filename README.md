@@ -1,9 +1,7 @@
 # Slate Engine
 
 <p align="center">
-  <a href="https://">
     <img src="images/slate engine logo darkbg.svg" width="400" alt="slate engine logo">
-  </a>
 </p>
 
 <p align="center">
@@ -19,7 +17,7 @@
   <img src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS">
 </p>
 
-**Slate Engine** is an open source, cross-platform, fully featured game engine to create 2d and 3d games from a single interface. It is currently very, very early in development, but i'm actively working on it!
+**slate engine** is an open source, cross-platform, fully featured game engine built with c++ and vulkan that can (hopefully) create 2d and 3d games
 
 ![demo image](/images/demo_scene.png)
 
@@ -132,6 +130,17 @@ then you can run it:
 
 ### refraction
 ![refraction demo gif](/images/refraction.gif)
+
+---
+
+# thanks to:
+* **mapbox** for earcut
+* **nlohmann** for json
+* **samhocevar** for portable-file-dialogs
+* **nothings** for the stb headers
+* **syoyo** for tinyobjloader
+
+and anyone else to contributed to any of these wonderful projects :)
 
 ---
 
