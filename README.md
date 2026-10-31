@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS">
 </p>
 
-**Slate Engine** is an open source, cross-platform, fully featured game engine to create 2d and 3d games from a single interface. It is currently very, very early in development, but i'm actively working on it!
+**Slate Engine** is an open source, cross-platform, fully featured game engine that can (hopefully) create 2d and 3d games. built using c++, vulkan, sdl, and more
 
 ![demo image](/images/demo_scene.png)
 
