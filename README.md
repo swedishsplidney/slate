@@ -76,17 +76,18 @@ slate engine is still in **very early development** and is not at all in a usabl
 
 # building from source:
 
-no premade binaries are available yet, but you can easily build it from source:
+premade binaries may be available (check the releases page):
 
 ### prerequisites:
 
 * CMake 3.22 or higher
 * C++20 compatible compiler
-* Vulkan SDK
+* vulkan SDK
 * SDL3 dev libraries
 * GLM
+* a gpu driver that can run vulkan
 
-### build and run:
+### build / run:
 
 to build it, just run the following commands in your terminal of choice:
 
