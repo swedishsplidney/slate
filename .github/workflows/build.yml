@@ -284,8 +284,8 @@ jobs:
           (cd "$ex" && "$APP" --appimage-extract >/dev/null)
           ex="$ex/squashfs-root"
           test -x "$ex/usr/bin/slate"            || { echo "::error::slate missing in AppImage"; exit 1; }
-          test -d "$ex/usr/bin/assets"           || { echo "::error::assets missing in AppImage"; exit 1; }
-          test -d "$ex/usr/bin/models"           || { echo "::error::models missing in AppImage"; exit 1; }
+          test -d "$ex/usr/bin/assets"            || { echo "::error::assets missing in AppImage"; exit 1; }
+          test -d "$ex/usr/bin/models"            || { echo "::error::models missing in AppImage"; exit 1; }
           ls "$ex"/usr/bin/shaders/compiled/*.spv >/dev/null 2>&1 || { echo "::error::shaders missing in AppImage"; exit 1; }
           ls "$ex"/usr/lib/libSDL3* >/dev/null 2>&1 || { echo "::error::SDL3 not bundled"; exit 1; }
           missing=$(LD_LIBRARY_PATH="$ex/usr/lib" ldd "$ex/usr/bin/slate" | grep 'not found' || true)
@@ -331,13 +331,14 @@ jobs:
             Copy-Item $dll $pkg/
           }
 
-          # Vulkan loader: not shipped with Windows (GPU drivers install it), so bundle it app-local
-          if (-not (Test-Path "$pkg/vulkan-1.dll")) {
-            $vk = Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter vulkan-1.dll -ErrorAction SilentlyContinue |
-                  Where-Object { $_.FullName -match '\\Bin\\' } | Select-Object -First 1
-            if (-not $vk) { throw "vulkan-1.dll not found in Vulkan SDK" }
-            Copy-Item $vk.FullName $pkg/
+          # Vulkan loader: Check System32 first, then recursive SDK search without hardcoded path filters
+          $vkPath = "$env:SystemRoot\System32\vulkan-1.dll"
+          if (-not (Test-Path $vkPath) -and $env:VULKAN_SDK) {
+              $vk = Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Filter vulkan-1.dll -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($vk) { $vkPath = $vk.FullName }
           }
+          if (-not (Test-Path $vkPath)) { throw "vulkan-1.dll not found in System32 or Vulkan SDK" }
+          Copy-Item $vkPath $pkg/
 
           # MSVC runtime, app-local, so clean machines don't need the VC++ redistributable
           foreach ($n in 'vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll') {
@@ -416,8 +417,9 @@ jobs:
           EOF
           chmod +x "$APP/Contents/MacOS/slate"
 
-          MVK="$(brew --prefix molten-vk)/lib/libMoltenVK.dylib"
-          test -f "$MVK" || { echo "::error::libMoltenVK.dylib not found at $MVK"; exit 1; }
+          # Robust dynamic search for libMoltenVK.dylib across homebrew prefix
+          MVK="$(find "$(brew --prefix)" -name "libMoltenVK.dylib" | head -n 1)"
+          test -f "$MVK" || { echo "::error::libMoltenVK.dylib not found via homebrew"; exit 1; }
           cp "$MVK" "$APP/Contents/Frameworks/"
           cat > "$RES/vulkan/icd.d/MoltenVK_icd.json" << 'EOF'
           {"file_format_version":"1.0.0","ICD":{"library_path":"../../../Frameworks/libMoltenVK.dylib","api_version":"1.2.0"}}
@@ -504,10 +506,10 @@ jobs:
           ditto "$MNT/SlateEngine.app" "$TESTDIR/SlateEngine.app"
           T="$TESTDIR/SlateEngine.app"
           test -x "$T/Contents/MacOS/slate"                    || { echo "::error::launcher missing in dmg"; exit 1; }
-          test -d "$T/Contents/Resources/assets"               || { echo "::error::assets missing in dmg"; exit 1; }
-          test -d "$T/Contents/Resources/models"               || { echo "::error::models missing in dmg"; exit 1; }
+          test -d "$T/Contents/Resources/assets"                || { echo "::error::assets missing in dmg"; exit 1; }
+          test -d "$T/Contents/Resources/models"                || { echo "::error::models missing in dmg"; exit 1; }
           ls "$T"/Contents/Resources/shaders/compiled/*.spv >/dev/null 2>&1 || { echo "::error::shaders missing in dmg"; exit 1; }
-          test -f "$T/Contents/Frameworks/libMoltenVK.dylib"   || { echo "::error::MoltenVK missing in dmg"; exit 1; }
+          test -f "$T/Contents/Frameworks/libMoltenVK.dylib"    || { echo "::error::MoltenVK missing in dmg"; exit 1; }
           codesign --verify --deep --strict "$T"
 
           # only fail on loader errors; hosted macOS runners have unreliable GPU support
